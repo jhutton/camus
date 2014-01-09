@@ -50,10 +50,10 @@ public class SequenceFileRecordWriterProvider implements RecordWriterProvider {
     }
 
     @Override
-    public RecordWriter<IEtlKey, CamusWrapper> getDataRecordWriter(
+    public RecordWriter<IEtlKey, CamusWrapper<?>> getDataRecordWriter(
             TaskAttemptContext  context,
             String              fileName,
-            CamusWrapper        camusWrapper,
+            CamusWrapper<?>        camusWrapper,
             FileOutputCommitter committer) throws IOException, InterruptedException {
 
         Configuration conf = context.getConfiguration();
@@ -100,9 +100,9 @@ public class SequenceFileRecordWriterProvider implements RecordWriterProvider {
 
         // Return a new anonymous RecordWriter that uses the
         // SequenceFile.Writer to write data to HDFS
-        return new RecordWriter<IEtlKey, CamusWrapper>() {
+        return new RecordWriter<IEtlKey, CamusWrapper<?>>() {
             @Override
-            public void write(IEtlKey key, CamusWrapper data) throws IOException, InterruptedException {
+            public void write(IEtlKey key, CamusWrapper<?> data) throws IOException, InterruptedException {
                 String record = (String)data.getRecord() + recordDelimiter;
                 // Use the timestamp from the EtlKey as the key for this record.
                 // TODO: Is there a better key to use here?

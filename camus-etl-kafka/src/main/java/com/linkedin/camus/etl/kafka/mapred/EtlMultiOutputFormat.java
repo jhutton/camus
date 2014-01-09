@@ -1,15 +1,5 @@
 package com.linkedin.camus.etl.kafka.mapred;
 
-import com.linkedin.camus.coders.CamusWrapper;
-import com.linkedin.camus.coders.Partitioner;
-import com.linkedin.camus.etl.IEtlKey;
-import com.linkedin.camus.etl.RecordWriterProvider;
-import com.linkedin.camus.etl.kafka.coders.DefaultPartitioner;
-import com.linkedin.camus.etl.kafka.common.AvroRecordWriterProvider;
-import com.linkedin.camus.etl.kafka.common.DateUtils;
-import com.linkedin.camus.etl.kafka.common.EtlCounts;
-import com.linkedin.camus.etl.kafka.common.EtlKey;
-import com.linkedin.camus.etl.kafka.common.ExceptionWritable;
 import java.io.BufferedOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -19,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -35,6 +26,16 @@ import org.apache.log4j.Logger;
 import org.codehaus.jackson.map.ObjectMapper;
 import org.joda.time.DateTime;
 import org.joda.time.format.DateTimeFormatter;
+
+import com.linkedin.camus.coders.CamusWrapper;
+import com.linkedin.camus.coders.Partitioner;
+import com.linkedin.camus.etl.IEtlKey;
+import com.linkedin.camus.etl.RecordWriterProvider;
+import com.linkedin.camus.etl.kafka.common.AvroRecordWriterProvider;
+import com.linkedin.camus.etl.kafka.common.DateUtils;
+import com.linkedin.camus.etl.kafka.common.EtlCounts;
+import com.linkedin.camus.etl.kafka.common.EtlKey;
+import com.linkedin.camus.etl.kafka.common.ExceptionWritable;
 
 /**
  * MultipleAvroOutputFormat.
@@ -81,8 +82,8 @@ public class EtlMultiOutputFormat extends FileOutputFormat<EtlKey, Object> {
         return new MultiEtlRecordWriter(context);
     }
 
-    private RecordWriter<IEtlKey, CamusWrapper> getDataRecordWriter(
-            TaskAttemptContext context, String fileName, CamusWrapper value) throws IOException,
+    private RecordWriter<IEtlKey, CamusWrapper<?>> getDataRecordWriter(
+            TaskAttemptContext context, String fileName, CamusWrapper<?> value) throws IOException,
             InterruptedException {
         RecordWriterProvider recordWriterProvider = null;
         try {
@@ -108,6 +109,7 @@ public class EtlMultiOutputFormat extends FileOutputFormat<EtlKey, Object> {
         job.getConfiguration().setClass(ETL_RECORD_WRITER_PROVIDER_CLASS, recordWriterProviderClass, RecordWriterProvider.class);
     }
 
+    @SuppressWarnings("unchecked")
     public static Class<RecordWriterProvider> getRecordWriterProviderClass(
             JobContext job) {
         return (Class<RecordWriterProvider>) job.getConfiguration()
@@ -209,14 +211,14 @@ public class EtlMultiOutputFormat extends FileOutputFormat<EtlKey, Object> {
         }
         return partitionersByTopic.get(ETL_DEFAULT_PARTITIONER_CLASS);
     }*/
-    
+
     public static Partitioner getDefaultPartitioner(JobContext job) {
         if(partitionersByTopic.get(ETL_DEFAULT_PARTITIONER_CLASS) == null) {
             List<Partitioner> partitioners = job.getConfiguration().getInstances(ETL_DEFAULT_PARTITIONER_CLASS, com.linkedin.camus.coders.Partitioner.class);
             partitionersByTopic.put(ETL_DEFAULT_PARTITIONER_CLASS, partitioners.get(0));
         }
         return partitionersByTopic.get(ETL_DEFAULT_PARTITIONER_CLASS);
-    }    
+    }
 
     public static Partitioner getPartitioner(JobContext job, String topicName) throws IOException {
         String customPartitionerProperty = ETL_DEFAULT_PARTITIONER_CLASS + "." + topicName;
@@ -236,12 +238,12 @@ public class EtlMultiOutputFormat extends FileOutputFormat<EtlKey, Object> {
     }
 
     class MultiEtlRecordWriter extends RecordWriter<EtlKey, Object> {
-        private TaskAttemptContext context;
+        private final TaskAttemptContext context;
         private Writer errorWriter = null;
         private String currentTopic = "";
         private long beginTimeStamp = 0;
 
-        private HashMap<String, RecordWriter<IEtlKey, CamusWrapper>> dataWriters = new HashMap<String, RecordWriter<IEtlKey, CamusWrapper>>();
+        private final Map<String, RecordWriter<IEtlKey, CamusWrapper<?>>> dataWriters = new HashMap<String, RecordWriter<IEtlKey, CamusWrapper<?>>>();
 
         public MultiEtlRecordWriter(TaskAttemptContext context) throws IOException,
                 InterruptedException {
@@ -276,7 +278,7 @@ public class EtlMultiOutputFormat extends FileOutputFormat<EtlKey, Object> {
                     committer.addOffset(key);
                 } else {
                     if (!key.getTopic().equals(currentTopic)) {
-                        for (RecordWriter<IEtlKey, CamusWrapper> writer : dataWriters
+                        for (RecordWriter<IEtlKey, CamusWrapper<?>> writer : dataWriters
                                 .values()) {
                             writer.close(context);
                         }
@@ -285,7 +287,7 @@ public class EtlMultiOutputFormat extends FileOutputFormat<EtlKey, Object> {
                     }
 
                     committer.addCounts(key);
-                    CamusWrapper value = (CamusWrapper) val;
+                    CamusWrapper<?> value = (CamusWrapper<?>) val;
                     String workingFileName = getWorkingFileName(context, key);
                     if (!dataWriters.containsKey(workingFileName)) {
                         dataWriters.put(

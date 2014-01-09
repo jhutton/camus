@@ -28,10 +28,10 @@ public class AvroRecordWriterProvider implements RecordWriterProvider {
     }
 
     @Override
-    public RecordWriter<IEtlKey, CamusWrapper> getDataRecordWriter(
+    public RecordWriter<IEtlKey, CamusWrapper<?>> getDataRecordWriter(
             TaskAttemptContext context,
             String fileName,
-            CamusWrapper data,
+            CamusWrapper<?> data,
             FileOutputCommitter committer) throws IOException, InterruptedException {
         final DataFileWriter<Object> writer = new DataFileWriter<Object>(
                 new SpecificDatumWriter<Object>());
@@ -52,9 +52,9 @@ public class AvroRecordWriterProvider implements RecordWriterProvider {
 
         writer.setSyncInterval(EtlMultiOutputFormat.getEtlAvroWriterSyncInterval(context));
 
-        return new RecordWriter<IEtlKey, CamusWrapper>() {
+        return new RecordWriter<IEtlKey, CamusWrapper<?>>() {
             @Override
-            public void write(IEtlKey ignore, CamusWrapper data) throws IOException {
+            public void write(IEtlKey ignore, CamusWrapper<?> data) throws IOException {
                 writer.append(data.getRecord());
             }
 

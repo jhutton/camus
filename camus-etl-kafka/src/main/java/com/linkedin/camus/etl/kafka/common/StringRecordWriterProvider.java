@@ -33,10 +33,10 @@ public class StringRecordWriterProvider implements RecordWriterProvider {
     }
 
     @Override
-    public RecordWriter<IEtlKey, CamusWrapper> getDataRecordWriter(
+    public RecordWriter<IEtlKey, CamusWrapper<?>> getDataRecordWriter(
             TaskAttemptContext  context,
             String              fileName,
-            CamusWrapper        camusWrapper,
+            CamusWrapper<?>        camusWrapper,
             FileOutputCommitter committer) throws IOException, InterruptedException {
 
         // If recordDelimiter hasn't been initialized, do so now
@@ -60,9 +60,9 @@ public class StringRecordWriterProvider implements RecordWriterProvider {
 
         // Return a new anonymous RecordWriter that uses the
         // FSDataOutputStream writer to write bytes straight into path.
-        return new RecordWriter<IEtlKey, CamusWrapper>() {
+        return new RecordWriter<IEtlKey, CamusWrapper<?>>() {
             @Override
-            public void write(IEtlKey ignore, CamusWrapper data) throws IOException {
+            public void write(IEtlKey ignore, CamusWrapper<?> data) throws IOException {
                 String record = (String)data.getRecord() + recordDelimiter;
                 writer.write(record.getBytes());
             }
