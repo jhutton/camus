@@ -15,16 +15,18 @@ import com.linkedin.camus.etl.kafka.common.EtlKey;
  * output -- EtlKey, AvroWrapper
  * 
  */
-public class EtlMapper extends Mapper<EtlKey, AvroWrapper<Object>, EtlKey, AvroWrapper<Object>> {
-	
-	@Override
-	public void map(EtlKey key, AvroWrapper<Object> val, Context context) throws IOException, InterruptedException {
-		long startTime = System.currentTimeMillis();
+public class EtlMapper extends
+        Mapper<EtlKey, AvroWrapper<Object>, EtlKey, AvroWrapper<Object>> {
 
-		context.write(key, val);
+    @Override
+    public void map(EtlKey key, AvroWrapper<Object> val, Context context)
+            throws IOException, InterruptedException {
+        long startTime = System.currentTimeMillis();
 
-		long endTime = System.currentTimeMillis();
-		long mapTime = ((endTime - startTime));
-		context.getCounter("total", "mapper-time(ms)").increment(mapTime);
-	}
+        context.write(key, val);
+
+        long endTime = System.currentTimeMillis();
+        long mapTime = ((endTime - startTime));
+        context.getCounter("total", "mapper-time(ms)").increment(mapTime);
+    }
 }
