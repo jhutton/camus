@@ -18,7 +18,7 @@ import com.linkedin.camus.coders.MessageDecoder;
  * CamusWrapper that works with Strings payloads, since JSON data is always a
  * String.
  */
-public class JsonStringMessageDecoder extends MessageDecoder<byte[], String> {
+public class JsonStringMessageDecoder extends MessageDecoder<String> {
     private static org.apache.log4j.Logger log = Logger
             .getLogger(JsonStringMessageDecoder.class);
 

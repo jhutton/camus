@@ -51,7 +51,7 @@ import com.linkedin.camus.etl.kafka.common.LeaderInfo;
 /**
  * Input format for a Kafka pull job.
  */
-public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper> {
+public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper<?>> {
 
     public static final String KAFKA_BLACKLIST_TOPIC = "kafka.blacklist.topics";
     public static final String KAFKA_WHITELIST_TOPIC = "kafka.whitelist.topics";
@@ -72,7 +72,7 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper> {
     private final Logger log = Logger.getLogger(getClass());
 
     @Override
-    public RecordReader<EtlKey, CamusWrapper> createRecordReader(
+    public RecordReader<EtlKey, CamusWrapper<?>> createRecordReader(
             InputSplit split, TaskAttemptContext context) throws IOException,
             InterruptedException {
         return new EtlRecordReader(split, context);
@@ -80,7 +80,7 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper> {
 
     /**
      * Gets the metadata from Kafka
-     * 
+     *
      * @param context
      * @return
      */
@@ -137,7 +137,7 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper> {
 
     /**
      * Gets the latest offsets and create the requests as needed
-     * 
+     *
      * @param context
      * @param offsetRequestInfo
      * @return
@@ -311,6 +311,7 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper> {
                 offsetRequestInfo);
 
         Collections.sort(finalRequests, new Comparator<EtlRequest>() {
+            @Override
             public int compare(EtlRequest r1, EtlRequest r2) {
                 return r1.getTopic().compareTo(r2.getTopic());
             }
@@ -610,14 +611,19 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper> {
     }
 
     public static void setMessageDecoderClass(JobContext job,
-            Class<MessageDecoder> cls) {
+            Class<? extends MessageDecoder<?>> cls) {
         job.getConfiguration().setClass(CAMUS_MESSAGE_DECODER_CLASS, cls,
                 MessageDecoder.class);
     }
 
-    public static Class<MessageDecoder> getMessageDecoderClass(JobContext job) {
-        return (Class<MessageDecoder>) job.getConfiguration().getClass(
+    public static Class<? extends MessageDecoder<?>> getMessageDecoderClass(JobContext job) {
+        @SuppressWarnings("unchecked")
+        Class<? extends MessageDecoder<?>> cls = (Class<? extends MessageDecoder<?>>) job.getConfiguration().getClass(
                 CAMUS_MESSAGE_DECODER_CLASS, KafkaAvroMessageDecoder.class);
+        if (!(MessageDecoder.class.isAssignableFrom(cls))) {
+            throw new IllegalArgumentException("Should be a message decoder class: " + cls);
+        }
+        return cls;
     }
 
     private class OffsetFileFilter implements PathFilter {

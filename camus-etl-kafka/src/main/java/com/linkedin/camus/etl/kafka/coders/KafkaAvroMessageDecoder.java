@@ -17,7 +17,7 @@ import com.linkedin.camus.coders.MessageDecoderException;
 import com.linkedin.camus.schemaregistry.CachedSchemaRegistry;
 import com.linkedin.camus.schemaregistry.SchemaRegistry;
 
-public class KafkaAvroMessageDecoder extends MessageDecoder<byte[], Record> {
+public class KafkaAvroMessageDecoder extends MessageDecoder<Record> {
     protected DecoderFactory decoderFactory;
     protected SchemaRegistry<Schema> registry;
     private Schema latestSchema;
@@ -26,6 +26,7 @@ public class KafkaAvroMessageDecoder extends MessageDecoder<byte[], Record> {
     public void init(Properties props, String topicName) {
         super.init(props, topicName);
         try {
+            @SuppressWarnings("unchecked")
             SchemaRegistry<Schema> registry = (SchemaRegistry<Schema>) Class
                     .forName(
                             props.getProperty(KafkaAvroMessageEncoder.KAFKA_MESSAGE_CODER_SCHEMA_REGISTRY_CLASS))
@@ -53,7 +54,7 @@ public class KafkaAvroMessageDecoder extends MessageDecoder<byte[], Record> {
         private static final byte MAGIC_BYTE = 0x0;
         private final SchemaRegistry<Schema> registry;
         private final String topicName;
-        private byte[] payload;
+        private final byte[] payload;
 
         public MessageDecoderHelper(SchemaRegistry<Schema> registry,
                 String topicName, byte[] payload) {
@@ -106,6 +107,7 @@ public class KafkaAvroMessageDecoder extends MessageDecoder<byte[], Record> {
         }
     }
 
+    @Override
     public CamusWrapper<Record> decode(byte[] payload) {
         try {
             MessageDecoderHelper helper = new MessageDecoderHelper(registry,

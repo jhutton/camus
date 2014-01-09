@@ -7,7 +7,6 @@ import java.util.Map;
 
 import org.apache.hadoop.io.MapWritable;
 import org.apache.hadoop.io.Text;
-import org.apache.hadoop.io.UTF8;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableComparable;
 
@@ -93,6 +92,7 @@ public class EtlKey implements WritableComparable<EtlKey>, IEtlKey {
         partitionMap = new MapWritable();
     }
 
+    @Override
     public String getServer() {
         return partitionMap.get(SERVER).toString();
     }
@@ -101,6 +101,7 @@ public class EtlKey implements WritableComparable<EtlKey>, IEtlKey {
         partitionMap.put(SERVER, new Text(newServer));
     }
 
+    @Override
     public String getService() {
         return partitionMap.get(SERVICE).toString();
     }
@@ -109,6 +110,7 @@ public class EtlKey implements WritableComparable<EtlKey>, IEtlKey {
         partitionMap.put(SERVICE, new Text(newService));
     }
 
+    @Override
     public long getTime() {
         return time;
     }
@@ -117,6 +119,7 @@ public class EtlKey implements WritableComparable<EtlKey>, IEtlKey {
         this.time = time;
     }
 
+    @Override
     public String getTopic() {
         return topic;
     }
@@ -125,10 +128,12 @@ public class EtlKey implements WritableComparable<EtlKey>, IEtlKey {
         return leaderId;
     }
 
+    @Override
     public int getPartition() {
         return this.partition;
     }
 
+    @Override
     public long getBeginOffset() {
         return this.beginOffset;
     }
@@ -137,14 +142,17 @@ public class EtlKey implements WritableComparable<EtlKey>, IEtlKey {
         this.offset = offset;
     }
 
+    @Override
     public long getOffset() {
         return this.offset;
     }
 
+    @Override
     public long getChecksum() {
         return this.checksum;
     }
 
+    @Override
     public void put(Writable key, Writable value) {
         this.partitionMap.put(key, value);
     }
@@ -153,13 +161,14 @@ public class EtlKey implements WritableComparable<EtlKey>, IEtlKey {
         this.partitionMap = partitionMap;
     }
 
+    @Override
     public MapWritable getPartitionMap() {
         return partitionMap;
     }
 
     @Override
     public void readFields(DataInput in) throws IOException {
-        this.leaderId = UTF8.readString(in);
+        this.leaderId = Text.readString(in);
         this.partition = in.readInt();
         this.beginOffset = in.readLong();
         this.offset = in.readLong();
@@ -179,7 +188,7 @@ public class EtlKey implements WritableComparable<EtlKey>, IEtlKey {
 
     @Override
     public void write(DataOutput out) throws IOException {
-        UTF8.writeString(out, this.leaderId);
+        Text.writeString(out, this.leaderId);
         out.writeInt(this.partition);
         out.writeLong(this.beginOffset);
         out.writeLong(this.offset);

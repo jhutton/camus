@@ -1,20 +1,18 @@
 package com.linkedin.camus.etl.kafka.common;
 
-import org.apache.hadoop.io.DataInputBuffer;
-import org.apache.hadoop.io.DataOutputBuffer;
-import org.apache.hadoop.io.UTF8;
-import org.apache.hadoop.io.WritableComparable;
-import org.junit.Before;
-import org.junit.Test;
+import static junit.framework.Assert.assertEquals;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
-import static junit.framework.Assert.assertEquals;
+import org.apache.hadoop.io.DataInputBuffer;
+import org.apache.hadoop.io.DataOutputBuffer;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.io.WritableComparable;
+import org.junit.Test;
 
 public class EtlKeyTest {
-
 
     @Test
     public void testShouldReadOldVersionOfEtlKey() throws IOException {
@@ -39,22 +37,24 @@ public class EtlKeyTest {
     }
 
     public static class OldEtlKey implements WritableComparable<OldEtlKey> {
-        private String leaderId = "leaderId";
-       	private int partition = 1;
-       	private long beginOffset = 2;
-       	private long offset = 3;
-       	private long checksum = 4;
-       	private String topic = "topic";
-       	private long time = 5;
-       	private String server = "server";
-       	private String service = "service";
+        private final String leaderId = "leaderId";
+        private final int partition = 1;
+        private final long beginOffset = 2;
+        private final long offset = 3;
+        private final long checksum = 4;
+        private final String topic = "topic";
+        private final long time = 5;
+        private final String server = "server";
+        private final String service = "service";
 
+        @Override
         public int compareTo(OldEtlKey o) {
             return 0;
         }
 
+        @Override
         public void write(DataOutput out) throws IOException {
-            UTF8.writeString(out, this.leaderId);
+            Text.writeString(out, this.leaderId);
             out.writeInt(this.partition);
             out.writeLong(this.beginOffset);
             out.writeLong(this.offset);
@@ -65,6 +65,7 @@ public class EtlKeyTest {
             out.writeUTF(this.service);
         }
 
+        @Override
         public void readFields(DataInput dataInput) throws IOException {
         }
     }

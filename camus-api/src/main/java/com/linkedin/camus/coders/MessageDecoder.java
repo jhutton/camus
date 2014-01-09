@@ -4,14 +4,14 @@ import java.util.Properties;
 
 /**
  * Decoder interface. Implementations should return a CamusWrapper with timestamp
- * set at the very least.  Camus will instantiate a descendent of this class
+ * set at the very least.  Camus will instantiate a descendant of this class
  * based on the property ccamus.message.decoder.class.
  * @author kgoodhop
  *
  * @param <M> The message type to be decoded
  * @param <R> The type of the decoded message
  */
-public abstract class MessageDecoder<M,R> {
+public abstract class MessageDecoder<R> {
 	protected Properties props;
 	protected String topicName;
 
@@ -20,6 +20,6 @@ public abstract class MessageDecoder<M,R> {
         this.topicName = topicName;
 	}
 
-	public abstract CamusWrapper<R> decode(M message) ;
+	public abstract CamusWrapper<R> decode(byte[] message) ;
 
 }

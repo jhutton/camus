@@ -14,18 +14,18 @@ import kafka.javaapi.OffsetRequest;
 import kafka.javaapi.OffsetResponse;
 import kafka.javaapi.consumer.SimpleConsumer;
 
-import org.apache.hadoop.io.UTF8;
+import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.mapreduce.JobContext;
 import org.apache.log4j.Logger;
 
 /**
  * A class that represents the kafka pull request.
- * 
+ *
  * The class is a container for topic, leaderId, partition, uri and offset. It
  * is used in reading and writing the sequence files used for the extraction
  * job.
- * 
+ *
  * @author Richard Park
  */
 public class EtlRequest implements Writable {
@@ -68,7 +68,7 @@ public class EtlRequest implements Writable {
      * Constructor for a KafkaETLRequest with the uri set to null and offset set
      * to -1. Both of these attributes can be set later. These attributes are
      * sufficient to ensure uniqueness.
-     * 
+     *
      * @param topic
      *            The topic name
      * @param leaderId
@@ -83,7 +83,7 @@ public class EtlRequest implements Writable {
 
     /**
      * Constructor for the KafkaETLRequest with the offset to -1.
-     * 
+     *
      * @param topic
      *            The topic name
      * @param leaderId
@@ -101,7 +101,7 @@ public class EtlRequest implements Writable {
     /**
      * Constructor for the full kafka pull job. Neither the brokerUri nor offset
      * are used to ensure uniqueness.
-     * 
+     *
      * @param topic
      *            The topic name
      * @param leaderId
@@ -124,7 +124,7 @@ public class EtlRequest implements Writable {
 
     /**
      * Sets the starting offset used by the kafka pull mapper.
-     * 
+     *
      * @param offset
      */
     public void setOffset(long offset) {
@@ -133,7 +133,7 @@ public class EtlRequest implements Writable {
 
     /**
      * Sets the broker uri for this request
-     * 
+     *
      * @param uri
      */
     public void setURI(URI uri) {
@@ -142,7 +142,7 @@ public class EtlRequest implements Writable {
 
     /**
      * Retrieve the broker node id.
-     * 
+     *
      * @return
      */
     public String getLeaderId() {
@@ -151,7 +151,7 @@ public class EtlRequest implements Writable {
 
     /**
      * Retrieve the topic
-     * 
+     *
      * @return
      */
     public String getTopic() {
@@ -160,7 +160,7 @@ public class EtlRequest implements Writable {
 
     /**
      * Retrieves the uri if set. The default is null.
-     * 
+     *
      * @return
      */
     public URI getURI() {
@@ -169,7 +169,7 @@ public class EtlRequest implements Writable {
 
     /**
      * Retrieves the partition number
-     * 
+     *
      * @return
      */
     public int getPartition() {
@@ -178,7 +178,7 @@ public class EtlRequest implements Writable {
 
     /**
      * Retrieves the offset
-     * 
+     *
      * @return
      */
     public long getOffset() {
@@ -192,7 +192,7 @@ public class EtlRequest implements Writable {
     /**
      * Returns true if the offset is valid (>= to earliest offset && <= to last
      * offset)
-     * 
+     *
      * @return
      */
     public boolean isValidOffset() {
@@ -282,7 +282,7 @@ public class EtlRequest implements Writable {
     /**
      * Estimates the request size in bytes by connecting to the broker and
      * querying for the offset that bets matches the endTime.
-     * 
+     *
      * @param endTime
      *            The time in millisec
      */
@@ -293,9 +293,9 @@ public class EtlRequest implements Writable {
 
     @Override
     public void readFields(DataInput in) throws IOException {
-        topic = UTF8.readString(in);
-        leaderId = UTF8.readString(in);
-        String str = UTF8.readString(in);
+        topic = Text.readString(in);
+        leaderId = Text.readString(in);
+        String str = Text.readString(in);
         if (!str.isEmpty())
             try {
                 uri = new URI(str);
@@ -309,12 +309,12 @@ public class EtlRequest implements Writable {
 
     @Override
     public void write(DataOutput out) throws IOException {
-        UTF8.writeString(out, topic);
-        UTF8.writeString(out, leaderId);
+        Text.writeString(out, topic);
+        Text.writeString(out, leaderId);
         if (uri != null)
-            UTF8.writeString(out, uri.toString());
+            Text.writeString(out, uri.toString());
         else
-            UTF8.writeString(out, "");
+            Text.writeString(out, "");
         out.writeInt(partition);
         out.writeLong(offset);
         out.writeLong(latestOffset);

@@ -26,7 +26,7 @@ import com.linkedin.camus.etl.kafka.common.EtlRequest;
 import com.linkedin.camus.etl.kafka.common.ExceptionWritable;
 import com.linkedin.camus.etl.kafka.common.KafkaReader;
 
-public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper> {
+public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper<?>> {
     private static final String PRINT_MAX_DECODER_EXCEPTIONS = "max.decoder.exceptions.to.print";
     private static final String DEFAULT_SERVER = "server";
     private static final String DEFAULT_SERVICE = "service";
@@ -39,11 +39,11 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper> {
     private long readBytes = 0;
 
     private boolean skipSchemaErrors = false;
-    private MessageDecoder decoder;
+    private MessageDecoder<?> decoder;
     private final BytesWritable msgValue = new BytesWritable();
     private final BytesWritable msgKey = new BytesWritable();
     private final EtlKey key = new EtlKey();
-    private CamusWrapper value;
+    private CamusWrapper<?> value;
 
     private int maxPullHours = 0;
     private int exceptionCount = 0;
@@ -59,7 +59,7 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper> {
 
     /**
      * Record reader to fetch directly from Kafka
-     * 
+     *
      * @param split
      * @throws IOException
      * @throws InterruptedException
@@ -121,9 +121,9 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper> {
         }
     }
 
-    private CamusWrapper getWrappedRecord(String topicName, byte[] payload)
+    private CamusWrapper<?> getWrappedRecord(String topicName, byte[] payload)
             throws IOException {
-        CamusWrapper r = null;
+        CamusWrapper<?> r = null;
         try {
             r = decoder.decode(payload);
         } catch (Exception e) {
@@ -177,7 +177,7 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper> {
     }
 
     @Override
-    public CamusWrapper getCurrentValue() throws IOException,
+    public CamusWrapper<?> getCurrentValue() throws IOException,
             InterruptedException {
         return value;
     }
@@ -261,7 +261,7 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper> {
                     }
 
                     long tempTime = System.currentTimeMillis();
-                    CamusWrapper wrapper;
+                    CamusWrapper<?> wrapper;
                     try {
                         wrapper = getWrappedRecord(key.getTopic(), bytes);
                     } catch (Exception e) {

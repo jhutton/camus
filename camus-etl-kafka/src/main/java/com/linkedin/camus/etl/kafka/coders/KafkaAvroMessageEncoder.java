@@ -17,7 +17,6 @@ import org.apache.avro.io.EncoderFactory;
 import org.apache.avro.specific.SpecificDatumWriter;
 import org.apache.avro.specific.SpecificRecord;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.log4j.Logger;
 
 import com.linkedin.camus.coders.MessageEncoder;
 import com.linkedin.camus.coders.MessageEncoderException;
@@ -29,20 +28,18 @@ public class KafkaAvroMessageEncoder extends
     public static final String KAFKA_MESSAGE_CODER_SCHEMA_REGISTRY_CLASS = "kafka.message.coder.schema.registry.class";
 
     private static final byte MAGIC_BYTE = 0x0;
-    private static final Logger logger = Logger
-            .getLogger(KafkaAvroMessageEncoder.class);
 
     private SchemaRegistry<Schema> client;
     private final Map<Schema, String> cache = Collections
             .synchronizedMap(new HashMap<Schema, String>());
     private final EncoderFactory encoderFactory = EncoderFactory.get();
 
-    @SuppressWarnings("unchecked")
     public KafkaAvroMessageEncoder(String topicName, Configuration conf) {
         this.topicName = topicName;
 
     }
 
+    @SuppressWarnings("unchecked")
     @Override
     public void init(Properties props, String topicName) {
         super.init(props, topicName);
@@ -58,6 +55,7 @@ public class KafkaAvroMessageEncoder extends
 
     }
 
+    @Override
     public byte[] toBytes(IndexedRecord record) {
         try {
 
