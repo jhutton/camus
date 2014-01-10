@@ -16,6 +16,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.SequenceFile;
 import org.apache.hadoop.io.SequenceFile.Writer;
+import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapreduce.JobContext;
 import org.apache.hadoop.mapreduce.OutputCommitter;
 import org.apache.hadoop.mapreduce.RecordWriter;
@@ -39,7 +40,7 @@ import com.linkedin.camus.etl.kafka.common.ExceptionWritable;
 
 /**
  * MultipleAvroOutputFormat.
- * 
+ *
  * File names are determined by output keys.
  */
 

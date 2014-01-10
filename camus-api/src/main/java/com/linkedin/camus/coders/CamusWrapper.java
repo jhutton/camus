@@ -1,5 +1,6 @@
 package com.linkedin.camus.coders;
 
+
 import org.apache.hadoop.io.MapWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;

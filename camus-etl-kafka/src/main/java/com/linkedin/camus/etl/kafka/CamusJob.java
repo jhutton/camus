@@ -33,15 +33,15 @@ import org.apache.hadoop.fs.PathFilter;
 import org.apache.hadoop.io.SequenceFile;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
-import org.apache.hadoop.mapred.JobID;
 import org.apache.hadoop.mapred.TIPStatus;
-import org.apache.hadoop.mapred.TaskCompletionEvent;
 import org.apache.hadoop.mapred.TaskReport;
 import org.apache.hadoop.mapreduce.Counter;
 import org.apache.hadoop.mapreduce.CounterGroup;
 import org.apache.hadoop.mapreduce.Counters;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.JobContext;
+import org.apache.hadoop.mapreduce.JobID;
+import org.apache.hadoop.mapreduce.TaskCompletionEvent;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.util.Tool;
@@ -127,29 +127,32 @@ public class CamusJob extends Configured implements Tool {
             }
             setConf(conf);
         }
-
-        Job job = new Job(getConf());
+        Job job = Job.getInstance(getConf());
         job.setJarByClass(CamusJob.class);
 
+        Configuration jobConf = job.getConfiguration();
+
+        if (jobConf.get("camus.job.name") != null) {
+            job.setJobName(jobConf.get("camus.job.name"));
+        } else {
+            job.setJobName("Camus Job");
+        }
+
         // Set the default partitioner
-        job.getConfiguration().set(
+        jobConf.set(
                 EtlMultiOutputFormat.ETL_DEFAULT_PARTITIONER_CLASS,
                 "com.linkedin.camus.etl.kafka.coders.DefaultPartitioner");
 
         for (Object key : props.keySet()) {
-            job.getConfiguration().set(key.toString(),
+            jobConf.set(key.toString(),
                     props.getProperty(key.toString()));
         }
 
-        job.setJobName("Camus Job");
-        if (job.getConfiguration().get("camus.job.name") != null) {
-            job.setJobName(job.getConfiguration().get("camus.job.name"));
-        }
+        FileSystem fs = FileSystem.get(jobConf);
 
-        FileSystem fs = FileSystem.get(job.getConfiguration());
-
-        String hadoopCacheJarDir = job.getConfiguration().get(
+        String hadoopCacheJarDir = jobConf.get(
                 "hdfs.default.classpath.dir", null);
+
         if (hadoopCacheJarDir != null) {
             FileStatus[] status = fs.listStatus(new Path(hadoopCacheJarDir));
 
@@ -161,7 +164,7 @@ public class CamusJob extends Configured implements Tool {
 
                         DistributedCache
                                 .addFileToClassPath(status[i].getPath(),
-                                        job.getConfiguration(), fs);
+                                        jobConf, fs);
                     }
                 }
             } else {
@@ -171,14 +174,14 @@ public class CamusJob extends Configured implements Tool {
         }
 
         // Adds External jars to hadoop classpath
-        String externalJarList = job.getConfiguration().get(
+        String externalJarList = jobConf.get(
                 "hadoop.external.jarFiles", null);
         if (externalJarList != null) {
             String[] jarFiles = externalJarList.split(",");
             for (String jarFile : jarFiles) {
                 log.info("Adding external jar File:" + jarFile);
                 DistributedCache.addFileToClassPath(new Path(jarFile),
-                        job.getConfiguration(), fs);
+                        jobConf, fs);
             }
         }
 
@@ -190,6 +193,7 @@ public class CamusJob extends Configured implements Tool {
         startTiming("pre-setup");
         startTiming("total");
         Job job = createJob(props);
+
         if (getLog4jConfigure(job)) {
             DOMConfigurator.configure("log4j.xml");
         }
@@ -293,19 +297,20 @@ public class CamusJob extends Configured implements Tool {
         createReport(job, timingMap);
 
         if (!job.isSuccessful()) {
-            JobClient client = new JobClient(
-                    new JobConf(job.getConfiguration()));
+            JobClient client = new JobClient(new JobConf(job.getConfiguration()));
 
-            TaskCompletionEvent[] tasks = job.getTaskCompletionEvents(0);
-
-            for (TaskReport task : client.getMapTaskReports(tasks[0]
-                    .getTaskAttemptId().getJobID())) {
-                if (task.getCurrentStatus().equals(TIPStatus.FAILED)) {
-                    for (String s : task.getDiagnostics()) {
-                        System.err.println("task error: " + s);
+            for (TaskCompletionEvent task : job.getTaskCompletionEvents(0)) {
+                JobID jobId = task.getTaskAttemptId().getJobID();
+                org.apache.hadoop.mapred.JobID oldId = org.apache.hadoop.mapred.JobID.downgrade(jobId);
+                for (TaskReport report : client.getMapTaskReports(oldId)) {
+                    if (report.getCurrentStatus().equals(TIPStatus.FAILED)) {
+                        for (String s : report.getDiagnostics()) {
+                            System.err.println("task error: " + s);
+                        }
                     }
                 }
             }
+
             throw new RuntimeException("hadoop job failed");
         }
     }
@@ -461,7 +466,7 @@ public class CamusJob extends Configured implements Tool {
 
         JobClient client = new JobClient(new JobConf(job.getConfiguration()));
 
-        TaskReport[] tasks = client.getMapTaskReports(JobID.downgrade(job
+        TaskReport[] tasks = client.getMapTaskReports(org.apache.hadoop.mapred.JobID.downgrade(job
                 .getJobID()));
 
         double min = Long.MAX_VALUE, max = 0, mean = 0;

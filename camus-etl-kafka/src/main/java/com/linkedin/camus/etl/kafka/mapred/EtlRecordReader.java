@@ -54,7 +54,8 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper<?>> {
 
     private String statusMsg = "";
 
-    EtlSplit split;
+    private EtlSplit split;
+
     private static Logger log = Logger.getLogger(EtlRecordReader.class);
 
     /**
@@ -201,39 +202,9 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper<?>> {
         while (true) {
             try {
                 if (reader == null || !reader.hasNext()) {
-                    EtlRequest request = split.popRequest();
-                    if (request == null) {
+                    if (!initReaderWithSplit()) {
                         return false;
                     }
-
-                    if (maxPullHours > 0) {
-                        endTimeStamp = 0;
-                    }
-
-                    key.set(request.getTopic(), request.getLeaderId(),
-                            request.getPartition(), request.getOffset(),
-                            request.getOffset(), 0);
-                    value = null;
-                    log.info("\n\ntopic:" + request.getTopic() + " partition:"
-                            + request.getPartition() + " beginOffset:"
-                            + request.getOffset() + " estimatedLastOffset:"
-                            + request.getLastOffset());
-
-                    statusMsg += statusMsg.length() > 0 ? "; " : "";
-                    statusMsg += request.getTopic() + ":"
-                            + request.getLeaderId() + ":"
-                            + request.getPartition();
-                    context.setStatus(statusMsg);
-
-                    if (reader != null) {
-                        closeReader();
-                    }
-                    reader = new KafkaReader(context, request,
-                            CamusJob.getKafkaTimeoutValue(mapperContext),
-                            CamusJob.getKafkaBufferSize(mapperContext));
-
-                    decoder = MessageDecoderFactory.createMessageDecoder(
-                            context, request.getTopic());
                 }
                 int count = 0;
                 while (reader.getNext(key, msgValue, msgKey)) {
@@ -253,28 +224,15 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper<?>> {
                     } else {
                         message = new Message(bytes, keyBytes);
                     }
-                    long checksum = key.getChecksum();
-                    if (checksum != message.checksum()) {
-                        throw new ChecksumException("Invalid message checksum "
-                                + message.checksum() + ". Expected "
-                                + key.getChecksum(), key.getOffset());
-                    }
 
-                    long tempTime = System.currentTimeMillis();
+                    validateKey(message);
+
+                    final long tempTime = System.currentTimeMillis();
                     CamusWrapper<?> wrapper;
                     try {
                         wrapper = getWrappedRecord(key.getTopic(), bytes);
                     } catch (Exception e) {
-                        if (exceptionCount < getMaximumDecoderExceptionsToPrint(context)) {
-                            mapperContext.write(key, new ExceptionWritable(e));
-                            exceptionCount++;
-                        } else if (exceptionCount == getMaximumDecoderExceptionsToPrint(context)) {
-                            exceptionCount = Integer.MAX_VALUE; // Any random
-                                                                // value
-                            log.info("The same exception has occured for more than "
-                                    + getMaximumDecoderExceptionsToPrint(context)
-                                    + " records. All further exceptions will not be printed");
-                        }
+                        maybePrintException(e);
                         continue;
                     }
 
@@ -284,7 +242,7 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper<?>> {
                         continue;
                     }
 
-                    long timeStamp = wrapper.getTimestamp();
+                    final long timeStamp = wrapper.getTimestamp();
                     try {
                         key.setTime(timeStamp);
                         key.setPartition(wrapper.getPartitionMap());
@@ -345,6 +303,66 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper<?>> {
                 continue;
             }
         }
+    }
+
+    private void maybePrintException(Exception e) throws IOException,
+            InterruptedException {
+        if (exceptionCount < getMaximumDecoderExceptionsToPrint(context)) {
+            mapperContext.write(key, new ExceptionWritable(e));
+            exceptionCount++;
+        } else if (exceptionCount == getMaximumDecoderExceptionsToPrint(context)) {
+            exceptionCount = Integer.MAX_VALUE; // Any random
+                                                // value
+            log.info("The same exception has occured for more than "
+                    + getMaximumDecoderExceptionsToPrint(context)
+                    + " records. All further exceptions will not be printed");
+        }
+    }
+
+    private void validateKey(Message message) throws ChecksumException {
+        long checksum = key.getChecksum();
+        if (checksum != message.checksum()) {
+            throw new ChecksumException("Invalid message checksum "
+                    + message.checksum() + ". Expected "
+                    + key.getChecksum(), key.getOffset());
+        }
+    }
+
+    private boolean initReaderWithSplit() throws IOException, Exception {
+        EtlRequest request = split.popRequest();
+        if (request == null) {
+            return false;
+        }
+
+        if (maxPullHours > 0) {
+            endTimeStamp = 0;
+        }
+
+        key.set(request.getTopic(), request.getLeaderId(),
+                request.getPartition(), request.getOffset(),
+                request.getOffset(), 0);
+        value = null;
+        log.info("\n\ntopic:" + request.getTopic() + " partition:"
+                + request.getPartition() + " beginOffset:"
+                + request.getOffset() + " estimatedLastOffset:"
+                + request.getLastOffset());
+
+        statusMsg += statusMsg.length() > 0 ? "; " : "";
+        statusMsg += request.getTopic() + ":"
+                + request.getLeaderId() + ":"
+                + request.getPartition();
+        context.setStatus(statusMsg);
+
+        if (reader != null) {
+            closeReader();
+        }
+        reader = new KafkaReader(context, request,
+                CamusJob.getKafkaTimeoutValue(mapperContext),
+                CamusJob.getKafkaBufferSize(mapperContext));
+
+        decoder = MessageDecoderFactory.createMessageDecoder(
+                context, request.getTopic());
+        return true;
     }
 
     private void closeReader() throws IOException {

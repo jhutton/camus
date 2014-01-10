@@ -8,7 +8,6 @@ import java.util.Properties;
  * based on the property ccamus.message.decoder.class.
  * @author kgoodhop
  *
- * @param <M> The message type to be decoded
  * @param <R> The type of the decoded message
  */
 public abstract class MessageDecoder<R> {
