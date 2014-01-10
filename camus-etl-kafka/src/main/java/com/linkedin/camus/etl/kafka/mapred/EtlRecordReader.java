@@ -228,7 +228,7 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper<?>> {
                     validateKey(message);
 
                     final long tempTime = System.currentTimeMillis();
-                    CamusWrapper<?> wrapper;
+                    final CamusWrapper<?> wrapper;
                     try {
                         wrapper = getWrappedRecord(key.getTopic(), bytes);
                     } catch (Exception e) {

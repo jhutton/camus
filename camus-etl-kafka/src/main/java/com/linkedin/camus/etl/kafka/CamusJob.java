@@ -98,28 +98,29 @@ public class CamusJob extends Configured implements Tool {
         this.props = props;
     }
 
-    private static HashMap<String, Long> timingMap = new HashMap<String, Long>();
+    private static Map<String, Long> timingMap = new HashMap<String, Long>();
 
     public static void startTiming(String name) {
-        timingMap.put(name,
-                (timingMap.get(name) == null ? 0 : timingMap.get(name))
-                        - System.currentTimeMillis());
+        Long current = timingMap.get(name);
+        if (current == null) {
+            current = 0L;
+        }
+        timingMap.put(name, current - System.nanoTime());
     }
 
     public static void stopTiming(String name) {
-        timingMap.put(name,
-                (timingMap.get(name) == null ? 0 : timingMap.get(name))
-                        + System.currentTimeMillis());
+        Long current = timingMap.get(name);
+        if (current == null) {
+            current = 0L;
+        }
+        timingMap.put(name, current + System.nanoTime());
     }
 
     public static void setTime(String name) {
-        timingMap.put(name,
-                (timingMap.get(name) == null ? 0 : timingMap.get(name))
-                        + System.currentTimeMillis());
+        timingMap.put(name, System.currentTimeMillis());
     }
 
     private Job createJob(Properties props) throws IOException {
-
         if (getConf() == null) {
             Configuration conf = new Configuration();
             for (Object key : props.keySet()) {
@@ -158,7 +159,7 @@ public class CamusJob extends Configured implements Tool {
 
             if (status != null) {
                 for (int i = 0; i < status.length; ++i) {
-                    if (!status[i].isDir()) {
+                    if (!status[i].isDirectory()) {
                         log.info("Adding Jar to Distributed Cache Archive File:"
                                 + status[i].getPath());
 
@@ -433,30 +434,28 @@ public class CamusJob extends Configured implements Tool {
     private void createReport(Job job, Map<String, Long> timingMap)
             throws IOException {
         StringBuilder sb = new StringBuilder();
-
         sb.append("***********Timing Report*************\n");
-
         sb.append("Job time (seconds):\n");
 
-        double preSetup = timingMap.get("pre-setup") / 1000;
-        double getSplits = timingMap.get("getSplits") / 1000;
-        double hadoop = timingMap.get("hadoop") / 1000;
-        double commit = timingMap.get("commit") / 1000;
-        double total = timingMap.get("total") / 1000;
+        double preSetup = timingMap.get("pre-setup") / 1000.0;
+        double getSplits = timingMap.get("getSplits") / 1000.0;
+        double hadoop = timingMap.get("hadoop") / 1000.0;
+        double commit = timingMap.get("commit") / 1000.0;
+        double total = timingMap.get("total") / 1000.0;
+        double kafkaSetupTime = timingMap.get("kafkaSetupTime") / 1000.0;
+
+        NumberFormat pct = NumberFormat.getPercentInstance();
 
         sb.append(String.format("    %12s %6.1f (%s)\n", "pre setup", preSetup,
-                NumberFormat.getPercentInstance().format(preSetup / total)
-                        .toString()));
-        sb.append(String.format("    %12s %6.1f (%s)\n", "get splits",
-                getSplits,
-                NumberFormat.getPercentInstance().format(getSplits / total)
-                        .toString()));
+                pct.format(preSetup / total).toString()));
+        sb.append(String.format("    %12s %6.1f (%s)\n", "kafka setup", kafkaSetupTime,
+                pct.format(kafkaSetupTime / total).toString()));
+        sb.append(String.format("    %12s %6.1f (%s)\n", "get splits", getSplits,
+                pct.format(getSplits / total).toString()));
         sb.append(String.format("    %12s %6.1f (%s)\n", "hadoop job", hadoop,
-                NumberFormat.getPercentInstance().format(hadoop / total)
-                        .toString()));
+                pct.format(hadoop / total).toString()));
         sb.append(String.format("    %12s %6.1f (%s)\n", "commit", commit,
-                NumberFormat.getPercentInstance().format(commit / total)
-                        .toString()));
+                pct.format(commit / total).toString()));
 
         int minutes = (int) total / 60;
         int seconds = (int) total % 60;

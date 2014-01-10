@@ -9,11 +9,11 @@ import com.linkedin.camus.etl.kafka.common.EtlKey;
 
 /**
  * KafkaETL mapper
- * 
+ *
  * input -- EtlKey, AvroWrapper
- * 
+ *
  * output -- EtlKey, AvroWrapper
- * 
+ *
  */
 public class EtlMapper extends
         Mapper<EtlKey, AvroWrapper<Object>, EtlKey, AvroWrapper<Object>> {
@@ -26,7 +26,7 @@ public class EtlMapper extends
         context.write(key, val);
 
         long endTime = System.currentTimeMillis();
-        long mapTime = ((endTime - startTime));
+        long mapTime = endTime - startTime;
         context.getCounter("total", "mapper-time(ms)").increment(mapTime);
     }
 }
