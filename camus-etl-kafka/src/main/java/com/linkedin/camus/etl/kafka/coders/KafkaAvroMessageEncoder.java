@@ -64,17 +64,16 @@ public class KafkaAvroMessageEncoder extends
 
             Schema schema = record.getSchema();
 
+            String id = cache.get(schema);
+
             // auto-register schema if it is not in the cache
-            String id;
-            if (!cache.containsKey(schema)) {
+            if (id == null) {
                 try {
                     id = client.register(topicName, record.getSchema());
                     cache.put(schema, id);
                 } catch (SchemaRegistryException e) {
                     throw new RuntimeException(e);
                 }
-            } else {
-                id = cache.get(schema);
             }
 
             out.write(ByteBuffer.allocate(4).putInt(Integer.parseInt(id))
