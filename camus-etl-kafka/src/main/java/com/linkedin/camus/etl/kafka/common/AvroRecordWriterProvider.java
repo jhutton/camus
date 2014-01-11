@@ -4,7 +4,7 @@ import java.io.IOException;
 
 import org.apache.avro.file.CodecFactory;
 import org.apache.avro.file.DataFileWriter;
-import org.apache.avro.generic.GenericRecord;
+import org.apache.avro.generic.GenericContainer;
 import org.apache.avro.specific.SpecificDatumWriter;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.mapreduce.RecordWriter;
@@ -17,10 +17,6 @@ import com.linkedin.camus.etl.IEtlKey;
 import com.linkedin.camus.etl.RecordWriterProvider;
 import com.linkedin.camus.etl.kafka.mapred.EtlMultiOutputFormat;
 
-/**
- *
- *
- */
 public class AvroRecordWriterProvider implements RecordWriterProvider {
     public final static String EXT = ".avro";
 
@@ -50,7 +46,7 @@ public class AvroRecordWriterProvider implements RecordWriterProvider {
         Path path = committer.getWorkPath();
         path = new Path(path, EtlMultiOutputFormat.getUniqueFile(context,
                 fileName, EXT));
-        writer.create(((GenericRecord) data.getRecord()).getSchema(), path
+        writer.create(((GenericContainer) data.getRecord()).getSchema(), path
                 .getFileSystem(context.getConfiguration()).create(path));
 
         writer.setSyncInterval(EtlMultiOutputFormat
