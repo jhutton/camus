@@ -471,7 +471,7 @@ public class CamusJob extends Configured implements Tool {
         double min = Long.MAX_VALUE, max = 0, mean = 0;
         double minRun = Long.MAX_VALUE, maxRun = 0, meanRun = 0;
         long totalTaskTime = 0;
-        TreeMap<Long, List<TaskReport>> taskMap = new TreeMap<Long, List<TaskReport>>();
+        Map<Long, List<TaskReport>> taskMap = new TreeMap<Long, List<TaskReport>>();
 
         for (TaskReport t : tasks) {
             long wait = t.getStartTime() - timingMap.get("hadoop_start");
@@ -524,17 +524,17 @@ public class CamusJob extends Configured implements Tool {
         long other = totalTaskTime - map - request - decode;
 
         sb.append("\nHadoop task breakdown:\n");
-        sb.append(String.format("    %12s %s\n", "kafka", NumberFormat
-                .getPercentInstance().format(request / (double) totalTaskTime)));
-        sb.append(String.format("    %12s %s\n", "decode", NumberFormat
-                .getPercentInstance().format(decode / (double) totalTaskTime)));
-        sb.append(String.format("    %12s %s\n", "map output", NumberFormat
-                .getPercentInstance().format(map / (double) totalTaskTime)));
-        sb.append(String.format("    %12s %s\n", "other", NumberFormat
-                .getPercentInstance().format(other / (double) totalTaskTime)));
+        sb.append(String.format("    %12s %s\n", "kafka",
+                pct.format(request / (double) totalTaskTime)));
+        sb.append(String.format("    %12s %s\n", "decode",
+                pct.format(decode / (double) totalTaskTime)));
+        sb.append(String.format("    %12s %s\n", "map output",
+                pct.format(map / (double) totalTaskTime)));
+        sb.append(String.format("    %12s %s\n", "other",
+                pct.format(other / (double) totalTaskTime)));
 
         sb.append(String.format("\n%16s %s\n", "Total MB read:",
-                mb / 1024 / 1024));
+                mb / (1024 * 1024)));
 
         log.info(sb.toString());
     }

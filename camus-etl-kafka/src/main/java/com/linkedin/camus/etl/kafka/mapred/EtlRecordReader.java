@@ -185,9 +185,6 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper<?>> {
 
     @Override
     public boolean nextKeyValue() throws IOException, InterruptedException {
-
-        Message message = null;
-
         // we only pull for a specified time. unfinished work will be
         // rescheduled in the next
         // run.
@@ -216,9 +213,11 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper<?>> {
                             1);
                     byte[] bytes = getBytes(msgValue);
                     byte[] keyBytes = getBytes(msgKey);
-                    // check the checksum of message.
-                    // If message has partition key, need to construct it with
-                    // Key for checkSum to match
+
+                    // check the checksum of message. If message has partition key, need to
+                    // construct it with Key for checkSum to match
+                    //
+                    final Message message;
                     if (keyBytes.length == 0) {
                         message = new Message(bytes);
                     } else {

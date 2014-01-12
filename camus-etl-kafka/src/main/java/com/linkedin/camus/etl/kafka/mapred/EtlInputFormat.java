@@ -79,10 +79,10 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper<?>> {
     }
 
     /**
-     * Gets the metadata from Kafka
+     * Gets the topic metadata list from Kafka.
      *
-     * @param context
-     * @return
+     * @param context the current job context
+     * @return a list of metadata
      */
     public List<TopicMetadata> getKafkaMetadata(JobContext context) {
         List<String> metaRequestTopics = new ArrayList<String>();
@@ -473,6 +473,10 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper<?>> {
 
     private void writePrevious(Collection<EtlKey> missedKeys, JobContext context)
             throws IOException {
+        if (missedKeys.isEmpty()) {
+            return;
+        }
+
         FileSystem fs = FileSystem.get(context.getConfiguration());
         Path outputPath = FileOutputFormat.getOutputPath(context);
 
@@ -483,9 +487,10 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper<?>> {
         Path output = new Path(outputPath, EtlMultiOutputFormat.OFFSET_PREFIX
                 + "-previous");
 
-        SequenceFile.Writer writer = SequenceFile.createWriter(fs,
-                context.getConfiguration(), output, EtlKey.class,
-                NullWritable.class);
+        SequenceFile.Writer writer = SequenceFile.createWriter(context.getConfiguration(),
+                SequenceFile.Writer.file(output),
+                SequenceFile.Writer.keyClass(EtlKey.class),
+                SequenceFile.Writer.valueClass(NullWritable.class));
 
         try {
             for (EtlKey key : missedKeys) {
@@ -506,10 +511,10 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper<?>> {
         }
 
         Path output = new Path(outputPath, EtlMultiOutputFormat.REQUESTS_FILE);
-        SequenceFile.Writer writer = SequenceFile.createWriter(fs,
-                context.getConfiguration(), output, EtlRequest.class,
-                NullWritable.class);
-
+        SequenceFile.Writer writer = SequenceFile.createWriter(context.getConfiguration(),
+                SequenceFile.Writer.file(output),
+                SequenceFile.Writer.keyClass(EtlRequest.class),
+                SequenceFile.Writer.valueClass(NullWritable.class));
         try {
             for (EtlRequest r : requests) {
                 writer.append(r, NullWritable.get());
@@ -529,11 +534,11 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper<?>> {
 
             for (FileStatus f : fs.listStatus(input, new OffsetFileFilter())) {
                 log.info("previous offset file:" + f.getPath().toString());
-                SequenceFile.Reader reader = new SequenceFile.Reader(fs,
-                        f.getPath(), context.getConfiguration());
+                SequenceFile.Reader reader = new SequenceFile.Reader(context.getConfiguration(),
+                        SequenceFile.Reader.file(f.getPath()));
 
                 try {
-                    EtlKey key = new EtlKey();
+                    final EtlKey key = new EtlKey();
                     while (reader.next(key, NullWritable.get())) {
                         EtlRequest request = new EtlRequest(context,
                                 key.getTopic(), key.getLeaderId(),
@@ -547,7 +552,6 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper<?>> {
                         } else {
                             offsetKeysMap.put(request, key);
                         }
-                        key = new EtlKey();
                     }
                 } finally {
                     reader.close();
