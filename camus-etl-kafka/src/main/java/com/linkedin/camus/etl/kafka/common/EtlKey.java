@@ -19,7 +19,7 @@ import com.linkedin.camus.etl.IEtlKey;
 public class EtlKey implements WritableComparable<EtlKey>, IEtlKey {
     public static final Text SERVER = new Text("server");
     public static final Text SERVICE = new Text("service");
-    public static EtlKey DUMMY_KEY = new EtlKey();
+    public static final EtlKey DUMMY_KEY = new EtlKey();
 
     private String leaderId = "";
     private int partition = 0;
@@ -30,7 +30,7 @@ public class EtlKey implements WritableComparable<EtlKey>, IEtlKey {
     private long time = 0;
     private String server = "";
     private String service = "";
-    private MapWritable partitionMap = new MapWritable();
+    private final MapWritable partitionMap = new MapWritable();
 
     /**
      * dummy empty constructor
@@ -40,7 +40,6 @@ public class EtlKey implements WritableComparable<EtlKey>, IEtlKey {
     }
 
     public EtlKey(EtlKey other) {
-
         this.partition = other.partition;
         this.beginOffset = other.beginOffset;
         this.offset = other.offset;
@@ -49,7 +48,7 @@ public class EtlKey implements WritableComparable<EtlKey>, IEtlKey {
         this.time = other.time;
         this.server = other.server;
         this.service = other.service;
-        this.partitionMap = new MapWritable(other.partitionMap);
+        setPartition(other.getPartitionMap());
     }
 
     public EtlKey(String topic, String leaderId, int partition) {
@@ -89,7 +88,7 @@ public class EtlKey implements WritableComparable<EtlKey>, IEtlKey {
         time = 0;
         server = "";
         service = "";
-        partitionMap = new MapWritable();
+        partitionMap.clear();
     }
 
     @Override
@@ -158,7 +157,8 @@ public class EtlKey implements WritableComparable<EtlKey>, IEtlKey {
     }
 
     public void setPartition(MapWritable partitionMap) {
-        this.partitionMap = partitionMap;
+        this.partitionMap.clear();
+        this.partitionMap.putAll(partitionMap);
     }
 
     @Override
@@ -177,7 +177,7 @@ public class EtlKey implements WritableComparable<EtlKey>, IEtlKey {
         this.time = in.readLong();
         this.server = in.readUTF(); // left for legacy
         this.service = in.readUTF(); // left for legacy
-        this.partitionMap = new MapWritable();
+        this.partitionMap.clear();
         try {
             this.partitionMap.readFields(in);
         } catch (IOException e) {
