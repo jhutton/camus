@@ -18,7 +18,7 @@ public class DefaultPartitioner implements Partitioner {
     public String encodePartition(JobContext context, IEtlKey key) {
         long outfilePartitionMs = EtlMultiOutputFormat
                 .getEtlOutputFileTimePartitionMins(context) * 60000L;
-        return "" + DateUtils.getPartition(outfilePartitionMs, key.getTime());
+        return "" + DateUtils.getPartition(outfilePartitionMs, key.getTimestamp());
     }
 
     @Override

@@ -162,11 +162,11 @@ public class EtlRecordReader<T> extends RecordReader<EtlKey, CamusWrapper<T>> {
 
                 Message message;
 
-                while ((message = reader.getNext(key)) != null) {
+                while ((message = reader.getNext()) != null) {
                     updateCountersAndProgress(message.size());
 
-                    if (decodeMessage(message)) {
-                        // no success this time, try the next one
+                    if (!decodeMessage(message)) {
+                        // try the next one
                         continue;
                     }
 
@@ -212,7 +212,10 @@ public class EtlRecordReader<T> extends RecordReader<EtlKey, CamusWrapper<T>> {
         boolean decoded;
         try {
             decoder.decode(valueBytes, value);
-            key.setTime(value.getTimestamp());
+
+            key.setOffset(reader.getCurrentOffset());
+            key.setChecksum(message.checksum());
+            key.setTimestamp(value.getTimestamp());
             key.setPartition(value.getPartitionMap());
             if (ignoreServerServiceList.contains(key.getTopic())
                     || ignoreServerServiceList.contains("all")) {
@@ -227,8 +230,7 @@ public class EtlRecordReader<T> extends RecordReader<EtlKey, CamusWrapper<T>> {
         }
 
         long decodeTime = System.currentTimeMillis() - decodeStart;
-        context.getCounter("total", "decode-time(ms)")
-            .increment(decodeTime);
+        context.getCounter("total", "decode-time(ms)").increment(decodeTime);
         return decoded;
     }
 
@@ -257,7 +259,8 @@ public class EtlRecordReader<T> extends RecordReader<EtlKey, CamusWrapper<T>> {
     /**
      * Get the value bytes from the specified message.
      *
-     * @param message the message
+     * @param message
+     *            the message
      * @return the bytes making up the value
      */
     private byte[] getValueBytes(Message message) {
@@ -278,8 +281,7 @@ public class EtlRecordReader<T> extends RecordReader<EtlKey, CamusWrapper<T>> {
 
     private void updateCountersAndProgress(int dataRead) {
         context.progress();
-        context.getCounter("total", "data-read")
-                .increment(dataRead);
+        context.getCounter("total", "data-read").increment(dataRead);
         context.getCounter("total", "event-count").increment(1);
         context.getCounter("total", "request-time(ms)").increment(
                 reader.getFetchTime());
@@ -299,6 +301,11 @@ public class EtlRecordReader<T> extends RecordReader<EtlKey, CamusWrapper<T>> {
 
         key.clear();
         value.clear();
+
+        key.setTopic(request.getTopic());
+        key.setLeaderId(request.getLeaderId());
+        key.setPartition(request.getPartition());
+        key.setBeginOffset(request.getOffset());
 
         log.info("\n\ntopic:" + request.getTopic() + " partition:"
                 + request.getPartition() + " beginOffset:"
@@ -320,8 +327,8 @@ public class EtlRecordReader<T> extends RecordReader<EtlKey, CamusWrapper<T>> {
                 CamusJob.getKafkaBufferSize(context));
 
         @SuppressWarnings("unchecked")
-        MessageDecoder<T> d = (MessageDecoder<T>) MessageDecoderFactory.createMessageDecoder(context,
-                request.getTopic());
+        MessageDecoder<T> d = (MessageDecoder<T>) MessageDecoderFactory
+                .createMessageDecoder(context, request.getTopic());
         decoder = d;
 
         return true;

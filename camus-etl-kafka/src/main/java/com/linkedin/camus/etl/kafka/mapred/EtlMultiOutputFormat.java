@@ -305,7 +305,7 @@ public class EtlMultiOutputFormat extends FileOutputFormat<EtlKey, Object> {
         public void write(EtlKey key, Object val) throws IOException,
                 InterruptedException {
             if (val instanceof CamusWrapper<?>) {
-                if (key.getTime() < beginTimeStamp) {
+                if (key.getTimestamp() < beginTimeStamp) {
                     // ((Mapper.Context)context).getCounter("total",
                     // "skip-old").increment(1);
                     committer.addOffset(key);

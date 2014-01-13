@@ -19,7 +19,6 @@ import com.linkedin.camus.etl.IEtlKey;
 public class EtlKey implements WritableComparable<EtlKey>, IEtlKey {
     public static final Text SERVER = new Text("server");
     public static final Text SERVICE = new Text("service");
-    public static final EtlKey DUMMY_KEY = new EtlKey();
 
     private String leaderId = "";
     private int partition = 0;
@@ -27,16 +26,10 @@ public class EtlKey implements WritableComparable<EtlKey>, IEtlKey {
     private long offset = 0;
     private long checksum = 0;
     private String topic = "";
-    private long time = 0;
-    private String server = "";
-    private String service = "";
+    private long timestamp = 0;
     private final MapWritable partitionMap = new MapWritable();
 
-    /**
-     * dummy empty constructor
-     */
     public EtlKey() {
-        this("dummy", "0", 0, 0, 0, 0);
     }
 
     public EtlKey(EtlKey other) {
@@ -45,37 +38,33 @@ public class EtlKey implements WritableComparable<EtlKey>, IEtlKey {
         this.offset = other.offset;
         this.checksum = other.checksum;
         this.topic = other.topic;
-        this.time = other.time;
-        this.server = other.server;
-        this.service = other.service;
+        this.timestamp = other.timestamp;
         setPartition(other.getPartitionMap());
     }
 
     public EtlKey(String topic, String leaderId, int partition) {
-        this.set(topic, leaderId, partition, 0, 0, 0);
+        this(topic, leaderId, partition, 0, 0);
+    }
+
+    public EtlKey(String topic, String leaderId, int partition,
+            long beginningOffset) {
+        this(topic, leaderId, partition, beginningOffset, 0);
     }
 
     public EtlKey(String topic, String leaderId, int partition,
             long beginOffset, long offset) {
-        this.set(topic, leaderId, partition, beginOffset, offset, 0);
+        this(topic, leaderId, partition, beginOffset, offset, 0, 0);
     }
 
     public EtlKey(String topic, String leaderId, int partition,
-            long beginOffset, long offset, long checksum) {
-        this.set(topic, leaderId, partition, beginOffset, offset, checksum);
-    }
-
-    public void set(String topic, String leaderId, int partition,
-            long beginOffset, long offset, long checksum) {
+            long beginOffset, long offset, long timestamp, long checksum) {
+        this.topic = topic;
         this.leaderId = leaderId;
         this.partition = partition;
         this.beginOffset = beginOffset;
         this.offset = offset;
+        this.timestamp = timestamp;
         this.checksum = checksum;
-        this.topic = topic;
-        this.time = System.currentTimeMillis(); // if event can't be decoded,
-                                                // this time will be used for
-                                                // debugging.
     }
 
     public void clear() {
@@ -85,11 +74,10 @@ public class EtlKey implements WritableComparable<EtlKey>, IEtlKey {
         offset = 0;
         checksum = 0;
         topic = "";
-        time = 0;
-        server = "";
-        service = "";
+        timestamp = 0;
         partitionMap.clear();
     }
+
 
     @Override
     public String getServer() {
@@ -110,12 +98,12 @@ public class EtlKey implements WritableComparable<EtlKey>, IEtlKey {
     }
 
     @Override
-    public long getTime() {
-        return time;
+    public long getTimestamp() {
+        return timestamp;
     }
 
-    public void setTime(long time) {
-        this.time = time;
+    public void setTimestamp(long time) {
+        this.timestamp = time;
     }
 
     @Override
@@ -123,8 +111,16 @@ public class EtlKey implements WritableComparable<EtlKey>, IEtlKey {
         return topic;
     }
 
+    public void setTopic(String topic) {
+        this.topic = topic;
+    }
+
     public String getLeaderId() {
         return leaderId;
+    }
+
+    public void setLeaderId(String leaderId) {
+        this.leaderId = leaderId;
     }
 
     @Override
@@ -132,13 +128,17 @@ public class EtlKey implements WritableComparable<EtlKey>, IEtlKey {
         return this.partition;
     }
 
+    public void setPartition(int partition) {
+        this.partition = partition;
+    }
+
     @Override
     public long getBeginOffset() {
         return this.beginOffset;
     }
 
-    public void setOffset(long offset) {
-        this.offset = offset;
+    public void setBeginOffset(long beginOffset) {
+        this.beginOffset = beginOffset;
     }
 
     @Override
@@ -146,9 +146,17 @@ public class EtlKey implements WritableComparable<EtlKey>, IEtlKey {
         return this.offset;
     }
 
+    public void setOffset(long offset) {
+        this.offset = offset;
+    }
+
     @Override
     public long getChecksum() {
         return this.checksum;
+    }
+
+    public void setChecksum(long checksum) {
+        this.checksum = checksum;
     }
 
     @Override
@@ -174,15 +182,13 @@ public class EtlKey implements WritableComparable<EtlKey>, IEtlKey {
         this.offset = in.readLong();
         this.checksum = in.readLong();
         this.topic = in.readUTF();
-        this.time = in.readLong();
-        this.server = in.readUTF(); // left for legacy
-        this.service = in.readUTF(); // left for legacy
+        this.timestamp = in.readLong();
         this.partitionMap.clear();
         try {
             this.partitionMap.readFields(in);
         } catch (IOException e) {
-            this.setServer(this.server);
-            this.setService(this.service);
+            setServer("unknown_server");
+            setService("unknown_service");
         }
     }
 
@@ -194,9 +200,7 @@ public class EtlKey implements WritableComparable<EtlKey>, IEtlKey {
         out.writeLong(this.offset);
         out.writeLong(this.checksum);
         out.writeUTF(this.topic);
-        out.writeLong(this.time);
-        out.writeUTF(this.server); // left for legacy
-        out.writeUTF(this.service); // left for legacy
+        out.writeLong(this.timestamp);
         this.partitionMap.write(out);
     }
 
@@ -230,20 +234,14 @@ public class EtlKey implements WritableComparable<EtlKey>, IEtlKey {
         builder.append(partition);
         builder.append("leaderId=");
         builder.append(leaderId);
-        builder.append(" server=");
-        builder.append(server);
-        builder.append(" service=");
-        builder.append(service);
         builder.append(" beginOffset=");
         builder.append(beginOffset);
         builder.append(" offset=");
         builder.append(offset);
-        builder.append(" server=");
-        builder.append(server);
         builder.append(" checksum=");
         builder.append(checksum);
         builder.append(" time=");
-        builder.append(time);
+        builder.append(timestamp);
 
         for (Map.Entry<Writable, Writable> e : partitionMap.entrySet()) {
             builder.append(" " + e.getKey() + "=");

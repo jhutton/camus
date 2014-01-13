@@ -2,7 +2,6 @@ package com.linkedin.camus.etl.kafka.common;
 
 import java.io.IOException;
 import java.net.URI;
-import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
@@ -16,7 +15,6 @@ import kafka.javaapi.message.ByteBufferMessageSet;
 import kafka.message.Message;
 import kafka.message.MessageAndOffset;
 
-import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.log4j.Logger;
 
@@ -89,29 +87,27 @@ public class KafkaReader {
         }
     }
 
+    public long getCurrentOffset() {
+        return currentOffset;
+    }
+
     /**
      * Fetches the next Kafka message and returns it to the caller.
      *
-     * @param key the etl key
      * @return a message or null
      * @throws IOException
      */
-    public Message getNext(EtlKey key) throws IOException {
-        if (hasNext()) {
-            MessageAndOffset msgAndOffset = messageIter.next();
-            Message message = msgAndOffset.message();
-
-            key.clear();
-            key.set(kafkaRequest.getTopic(), kafkaRequest.getLeaderId(),
-                    kafkaRequest.getPartition(), currentOffset,
-                    msgAndOffset.offset() + 1, message.checksum());
-
-            currentOffset = msgAndOffset.offset() + 1; // increase offset
-            currentCount++; // increase count
-            return message;
+    public Message getNext() throws IOException {
+        if (!hasNext()) {
+            return null;
         }
 
-        return null;
+        MessageAndOffset msgAndOffset = messageIter.next();
+        Message message = msgAndOffset.message();
+
+        currentOffset = msgAndOffset.offset() + 1; // increase offset
+        currentCount++; // increase count
+        return message;
     }
 
     /**
@@ -257,6 +253,27 @@ public class KafkaReader {
     }
 
     /**
+     * @return the topic this reader is associated with
+     */
+    public String getTopic() {
+        return kafkaRequest.getTopic();
+    }
+
+    /**
+     * @return the leader id this reader is associated with
+     */
+    public String getLeaderId() {
+        return kafkaRequest.getLeaderId();
+    }
+
+    /**
+     * @return the partition id this reader is reading from
+     */
+    public int getPartition() {
+        return kafkaRequest.getPartition();
+    }
+
+    /**
      * Returns the totalFetchTime in ms
      *
      * @return
@@ -264,4 +281,5 @@ public class KafkaReader {
     public long getTotalFetchTime() {
         return totalFetchTime;
     }
+
 }

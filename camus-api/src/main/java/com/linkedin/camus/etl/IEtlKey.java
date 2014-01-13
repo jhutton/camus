@@ -8,7 +8,7 @@ public interface IEtlKey {
 
     String getService();
 
-    long getTime();
+    long getTimestamp();
 
     String getTopic();
 

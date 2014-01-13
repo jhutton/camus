@@ -14,6 +14,9 @@ import org.apache.hadoop.io.Writable;
  * @param <R> The type of decoded payload
  */
 public class CamusWrapper<R> {
+    private static final Text SERVER = new Text("server");
+    private static final Text SERVICE = new Text("service");
+
     private R record;
     private long timestamp;
     private final MapWritable partitionMap = new MapWritable();
@@ -37,8 +40,8 @@ public class CamusWrapper<R> {
         this.record = record;
         this.timestamp = timestamp;
         partitionMap.clear();
-        partitionMap.put(new Text("server"), new Text(server));
-        partitionMap.put(new Text("service"), new Text(service));
+        partitionMap.put(SERVER, new Text(server));
+        partitionMap.put(SERVICE, new Text(service));
     }
 
     /**

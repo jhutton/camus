@@ -101,7 +101,7 @@ public class SequenceFileRecordWriterProvider implements RecordWriterProvider {
                 String record = (String) data.getRecord() + recordDelimiter;
                 // Use the timestamp from the EtlKey as the key for this record.
                 // TODO: Is there a better key to use here?
-                writer.append(new LongWritable(key.getTime()), new Text(record));
+                writer.append(new LongWritable(key.getTimestamp()), new Text(record));
             }
 
             @Override
