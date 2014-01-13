@@ -203,21 +203,21 @@ public class EtlKey implements WritableComparable<EtlKey>, IEtlKey {
     @Override
     public int compareTo(EtlKey o) {
         if (partition != o.partition) {
-            return partition = o.partition;
-        } else {
+            return partition - o.partition;
+        } else if (beginOffset != o.beginOffset) {
             if (beginOffset > o.beginOffset) {
                 return 1;
-            } else if (beginOffset < o.beginOffset) {
-                return -1;
             } else {
-                if (checksum > o.checksum) {
-                    return 1;
-                } else if (checksum < o.checksum) {
-                    return -1;
-                } else {
-                    return 0;
-                }
+                return -1;
             }
+        } else if (checksum != o.checksum) {
+            if (checksum > o.checksum) {
+                return 1;
+            } else {
+                return -1;
+            }
+        } else {
+            return 0;
         }
     }
 
