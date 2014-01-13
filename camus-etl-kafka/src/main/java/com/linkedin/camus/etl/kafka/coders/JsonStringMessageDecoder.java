@@ -45,7 +45,7 @@ public class JsonStringMessageDecoder extends MessageDecoder<String> {
     }
 
     @Override
-    public CamusWrapper<String> decode(byte[] payload) {
+    public boolean decode(byte[] payload, CamusWrapper<String> wrapper) {
         long timestamp = 0;
         String payloadString;
         JsonObject jsonObject;
@@ -84,6 +84,7 @@ public class JsonStringMessageDecoder extends MessageDecoder<String> {
             timestamp = System.currentTimeMillis();
         }
 
-        return new CamusWrapper<String>(payloadString, timestamp);
+        wrapper.set(payloadString, timestamp);
+        return true;
     }
 }

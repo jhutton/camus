@@ -19,6 +19,14 @@ public abstract class MessageDecoder<R> {
         this.topicName = topicName;
 	}
 
-	public abstract CamusWrapper<R> decode(byte[] message) ;
+	/**
+	 * Decode the message contained in the specified message bytes and set the
+	 * value in the specified wrapper.
+	 *
+	 * @param message the message
+	 * @param wrapper the wrapper
+	 * @return true if a value was successfully decoded and set, else false
+	 */
+	public abstract boolean decode(byte[] message, CamusWrapper<R> wrapper) ;
 
 }

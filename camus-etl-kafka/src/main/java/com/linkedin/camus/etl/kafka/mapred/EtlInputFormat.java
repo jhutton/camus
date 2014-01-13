@@ -71,6 +71,7 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper<?>> {
 
     private final Logger log = Logger.getLogger(getClass());
 
+    @SuppressWarnings({ "unchecked", "rawtypes" })
     @Override
     public RecordReader<EtlKey, CamusWrapper<?>> createRecordReader(
             InputSplit split, TaskAttemptContext context) throws IOException,

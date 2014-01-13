@@ -108,7 +108,7 @@ public class KafkaAvroMessageDecoder extends MessageDecoder<Record> {
     }
 
     @Override
-    public CamusWrapper<Record> decode(byte[] payload) {
+    public boolean decode(byte[] payload, CamusWrapper<Record> wrapper) {
         try {
             MessageDecoderHelper helper = new MessageDecoderHelper(registry,
                     topicName, payload).invoke();
@@ -116,10 +116,10 @@ public class KafkaAvroMessageDecoder extends MessageDecoder<Record> {
                     helper.getSchema()) : new GenericDatumReader<Record>(
                     helper.getSchema(), helper.getTargetSchema());
 
-            return new CamusAvroWrapper(reader.read(null, decoderFactory
+            wrapper.set(reader.read(null, decoderFactory
                     .binaryDecoder(helper.getBuffer().array(),
                             helper.getStart(), helper.getLength(), null)));
-
+            return true;
         } catch (IOException e) {
             throw new MessageDecoderException(e);
         }

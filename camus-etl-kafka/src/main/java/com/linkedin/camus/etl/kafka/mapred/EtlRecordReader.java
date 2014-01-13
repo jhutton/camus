@@ -25,7 +25,7 @@ import com.linkedin.camus.etl.kafka.common.EtlRequest;
 import com.linkedin.camus.etl.kafka.common.ExceptionWritable;
 import com.linkedin.camus.etl.kafka.common.KafkaReader;
 
-public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper<?>> {
+public class EtlRecordReader<T> extends RecordReader<EtlKey, CamusWrapper<T>> {
     private static Logger log = Logger.getLogger(EtlRecordReader.class);
     private static final String PRINT_MAX_DECODER_EXCEPTIONS = "max.decoder.exceptions.to.print";
     private static final String DEFAULT_SERVER = "server";
@@ -33,9 +33,8 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper<?>> {
 
     private Mapper<EtlKey, Writable, EtlKey, Writable>.Context context;
 
-    private boolean skipSchemaErrors = false;
     private final EtlKey key = new EtlKey();
-    private CamusWrapper<?> value;
+    private final CamusWrapper<T> value = new CamusWrapper<>();
 
     private int maxPullHours = 0;
     private int exceptionCount = 0;
@@ -49,7 +48,7 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper<?>> {
     private final long totalBytes;
 
     private KafkaReader reader;
-    private MessageDecoder<?> decoder;
+    private MessageDecoder<T> decoder;
     private long readBytes = 0;
 
     /**
@@ -66,9 +65,6 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper<?>> {
     public EtlRecordReader(InputSplit split, TaskAttemptContext context)
             throws IOException, InterruptedException {
         this.split = (EtlSplit) split;
-
-        this.skipSchemaErrors = EtlInputFormat
-                .getEtlIgnoreSchemaErrors(context);
 
         int maxPullHours = EtlInputFormat.getKafkaMaxPullHrs(context);
         if (maxPullHours > 0) {
@@ -149,7 +145,7 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper<?>> {
     }
 
     @Override
-    public CamusWrapper<?> getCurrentValue() throws IOException,
+    public CamusWrapper<T> getCurrentValue() throws IOException,
             InterruptedException {
         return value;
     }
@@ -169,27 +165,12 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper<?>> {
                 while ((message = reader.getNext(key)) != null) {
                     updateCountersAndProgress(message.size());
 
-                    final byte[] valueBytes = getValueBytes(message);
-
-                    value = decodeRecord(valueBytes);
-                    if (value == null) {
+                    if (decodeMessage(message)) {
+                        // no success this time, try the next one
                         continue;
                     }
 
                     final long timeStamp = value.getTimestamp();
-                    try {
-                        key.setTime(timeStamp);
-                        key.setPartition(value.getPartitionMap());
-                        if (ignoreServerServiceList.contains(key.getTopic())
-                                || ignoreServerServiceList.contains("all")) {
-                            key.setServer(DEFAULT_SERVER);
-                            key.setService(DEFAULT_SERVICE);
-                        }
-                    } catch (Exception e) {
-                        context.write(key, new ExceptionWritable(e));
-                        continue;
-                    }
-
                     if (timeStamp < beginTimeStamp) {
                         // skip records until we reach our time to begin
                         // processing
@@ -223,40 +204,32 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper<?>> {
         }
     }
 
-    private CamusWrapper<?> decodeRecord(byte[] bytes) throws IOException,
+    private boolean decodeMessage(Message message) throws IOException,
             InterruptedException {
         final long decodeStart = System.currentTimeMillis();
-        final CamusWrapper<?> wrapper;
+        final byte[] valueBytes = getValueBytes(message);
+
+        boolean decoded;
         try {
-            wrapper = getWrappedRecord(key.getTopic(), bytes);
+            decoder.decode(valueBytes, value);
+            key.setTime(value.getTimestamp());
+            key.setPartition(value.getPartitionMap());
+            if (ignoreServerServiceList.contains(key.getTopic())
+                    || ignoreServerServiceList.contains("all")) {
+                key.setServer(DEFAULT_SERVER);
+                key.setService(DEFAULT_SERVICE);
+            }
+            decoded = true;
         } catch (Exception e) {
             maybePrintException(e);
-            return null;
+            context.write(key, new ExceptionWritable(e));
+            decoded = false;
         }
 
-        if (wrapper == null) {
-            context.write(key, new ExceptionWritable(new RuntimeException(
-                    "null record")));
-        } else {
-            long decodeTime = System.currentTimeMillis() - decodeStart;
-            context.getCounter("total", "decode-time(ms)")
-                    .increment(decodeTime);
-        }
-
-        return wrapper;
-    }
-
-    private CamusWrapper<?> getWrappedRecord(String topicName, byte[] payload)
-            throws IOException {
-        CamusWrapper<?> r = null;
-        try {
-            r = decoder.decode(payload);
-        } catch (Exception e) {
-            if (!skipSchemaErrors) {
-                throw new IOException(e);
-            }
-        }
-        return r;
+        long decodeTime = System.currentTimeMillis() - decodeStart;
+        context.getCounter("total", "decode-time(ms)")
+            .increment(decodeTime);
+        return decoded;
     }
 
     private void maybePrintException(Exception e) throws IOException,
@@ -325,7 +298,7 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper<?>> {
         }
 
         key.clear();
-        value = null;
+        value.clear();
 
         log.info("\n\ntopic:" + request.getTopic() + " partition:"
                 + request.getPartition() + " beginOffset:"
@@ -346,8 +319,10 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper<?>> {
                 CamusJob.getKafkaTimeoutValue(context),
                 CamusJob.getKafkaBufferSize(context));
 
-        decoder = MessageDecoderFactory.createMessageDecoder(context,
+        @SuppressWarnings("unchecked")
+        MessageDecoder<T> d = (MessageDecoder<T>) MessageDecoderFactory.createMessageDecoder(context,
                 request.getTopic());
+        decoder = d;
 
         return true;
     }

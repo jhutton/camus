@@ -12,7 +12,7 @@ public class LatestSchemaKafkaAvroMessageDecoder extends
         KafkaAvroMessageDecoder {
 
     @Override
-    public CamusWrapper<Record> decode(byte[] payload) {
+    public boolean decode(byte[] payload, CamusWrapper<Record> wrapper) {
         try {
             GenericDatumReader<Record> reader = new GenericDatumReader<Record>();
 
@@ -21,13 +21,14 @@ public class LatestSchemaKafkaAvroMessageDecoder extends
 
             reader.setSchema(schema);
 
-            return new CamusWrapper<Record>(reader.read(
+            wrapper.set(reader.read(
                     null,
                     decoderFactory.jsonDecoder(schema,
                             new String(payload,
                             // Message.payloadOffset(message.magic()),
                                     Message.MagicOffset(), payload.length
                                             - Message.MagicOffset()))));
+            return true;
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
