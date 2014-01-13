@@ -2,6 +2,7 @@ package com.linkedin.camus.etl.kafka.mapred;
 
 import java.io.IOException;
 import java.util.HashSet;
+import java.util.Set;
 
 import kafka.message.Message;
 
@@ -11,7 +12,6 @@ import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.JobContext;
 import org.apache.hadoop.mapreduce.Mapper;
-import org.apache.hadoop.mapreduce.Mapper.Context;
 import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.log4j.Logger;
@@ -27,19 +27,14 @@ import com.linkedin.camus.etl.kafka.common.ExceptionWritable;
 import com.linkedin.camus.etl.kafka.common.KafkaReader;
 
 public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper<?>> {
+    private static Logger log = Logger.getLogger(EtlRecordReader.class);
     private static final String PRINT_MAX_DECODER_EXCEPTIONS = "max.decoder.exceptions.to.print";
     private static final String DEFAULT_SERVER = "server";
     private static final String DEFAULT_SERVICE = "service";
-    private TaskAttemptContext context;
 
-    private Mapper<EtlKey, Writable, EtlKey, Writable>.Context mapperContext;
-    private KafkaReader reader;
-
-    private long totalBytes;
-    private long readBytes = 0;
+    private Mapper<EtlKey, Writable, EtlKey, Writable>.Context context;
 
     private boolean skipSchemaErrors = false;
-    private MessageDecoder<?> decoder;
     private final BytesWritable msgValue = new BytesWritable();
     private final BytesWritable msgKey = new BytesWritable();
     private final EtlKey key = new EtlKey();
@@ -50,89 +45,85 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper<?>> {
     private long maxPullTime = 0;
     private long beginTimeStamp = 0;
     private long endTimeStamp = 0;
-    private HashSet<String> ignoreServerServiceList = null;
+    private final Set<String> ignoreServerServiceList = new HashSet<String>();
+    private final StringBuilder statusMsgBuilder = new StringBuilder();
 
-    private String statusMsg = "";
+    private final EtlSplit split;
+    private final long totalBytes;
 
-    private EtlSplit split;
-
-    private static Logger log = Logger.getLogger(EtlRecordReader.class);
+    private KafkaReader reader;
+    private MessageDecoder<?> decoder;
+    private long readBytes = 0;
 
     /**
-     * Record reader to fetch directly from Kafka
+     * Create an instance of the record reader for the specified split and
+     * context.
      *
      * @param split
+     *            the split
+     * @param context
+     *            the task context
      * @throws IOException
      * @throws InterruptedException
      */
     public EtlRecordReader(InputSplit split, TaskAttemptContext context)
             throws IOException, InterruptedException {
-        initialize(split, context);
-    }
-
-    @SuppressWarnings({ "rawtypes", "unchecked" })
-    @Override
-    public void initialize(InputSplit split, TaskAttemptContext context)
-            throws IOException, InterruptedException {
         this.split = (EtlSplit) split;
-        this.context = context;
-
-        if (context instanceof Mapper.Context) {
-            mapperContext = (Context) context;
-        }
 
         this.skipSchemaErrors = EtlInputFormat
                 .getEtlIgnoreSchemaErrors(context);
 
-        if (EtlInputFormat.getKafkaMaxPullHrs(context) != -1) {
-            this.maxPullHours = EtlInputFormat.getKafkaMaxPullHrs(context);
+        int maxPullHours = EtlInputFormat.getKafkaMaxPullHrs(context);
+        if (maxPullHours > 0) {
+            this.maxPullHours = maxPullHours;
         } else {
             this.endTimeStamp = Long.MAX_VALUE;
         }
 
-        if (EtlInputFormat.getKafkaMaxPullMinutesPerTask(context) != -1) {
+        int maxPullMinutes = EtlInputFormat
+                .getKafkaMaxPullMinutesPerTask(context);
+        if (maxPullMinutes > 0) {
             DateTime now = new DateTime();
-            this.maxPullTime = now.plusMinutes(
-                    EtlInputFormat.getKafkaMaxPullMinutesPerTask(context))
-                    .getMillis();
+            this.maxPullTime = now.plusMinutes(maxPullMinutes).getMillis();
         } else {
             this.maxPullTime = Long.MAX_VALUE;
         }
 
-        if (EtlInputFormat.getKafkaMaxHistoricalDays(context) != -1) {
-            int maxDays = EtlInputFormat.getKafkaMaxHistoricalDays(context);
-            beginTimeStamp = (new DateTime()).minusDays(maxDays).getMillis();
+        int maxHistoricalDays = EtlInputFormat
+                .getKafkaMaxHistoricalDays(context);
+        if (maxHistoricalDays != -1) {
+            beginTimeStamp = (new DateTime()).minusDays(maxHistoricalDays)
+                    .getMillis();
         } else {
             beginTimeStamp = 0;
         }
 
-        ignoreServerServiceList = new HashSet<String>();
         for (String ignoreServerServiceTopic : EtlInputFormat
                 .getEtlAuditIgnoreServiceTopicList(context)) {
             ignoreServerServiceList.add(ignoreServerServiceTopic);
         }
 
-        this.totalBytes = this.split.getLength();
+        this.totalBytes = split.getLength();
+    }
+
+    @SuppressWarnings("unchecked")
+    @Override
+    public void initialize(InputSplit split, TaskAttemptContext context)
+            throws IOException, InterruptedException {
+        // The context instance here should be a {@link Mapper.Context}
+        // implementation,
+        // while the one passed to the constructor will not be, which is why we
+        // can't make
+        // the context a final variable and assign it in the constructor
+        this.context = (Mapper<EtlKey, Writable, EtlKey, Writable>.Context) context;
     }
 
     @Override
     public synchronized void close() throws IOException {
         if (reader != null) {
             reader.close();
+            reader = null;
         }
-    }
-
-    private CamusWrapper<?> getWrappedRecord(String topicName, byte[] payload)
-            throws IOException {
-        CamusWrapper<?> r = null;
-        try {
-            r = decoder.decode(payload);
-        } catch (Exception e) {
-            if (!skipSchemaErrors) {
-                throw new IOException(e);
-            }
-        }
-        return r;
     }
 
     private static byte[] getBytes(BytesWritable val) {
@@ -185,17 +176,6 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper<?>> {
 
     @Override
     public boolean nextKeyValue() throws IOException, InterruptedException {
-        // we only pull for a specified time. unfinished work will be
-        // rescheduled in the next
-        // run.
-        if (System.currentTimeMillis() > maxPullTime) {
-            log.info("Max pull time reached");
-            if (reader != null) {
-                closeReader();
-            }
-            return false;
-        }
-
         while (true) {
             try {
                 if (reader == null || !reader.hasNext()) {
@@ -203,19 +183,15 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper<?>> {
                         return false;
                     }
                 }
-                int count = 0;
-                while (reader.getNext(key, msgValue, msgKey)) {
-                    count++;
-                    context.progress();
-                    mapperContext.getCounter("total", "data-read").increment(
-                            msgValue.getLength());
-                    mapperContext.getCounter("total", "event-count").increment(
-                            1);
-                    byte[] bytes = getBytes(msgValue);
-                    byte[] keyBytes = getBytes(msgKey);
 
-                    // check the checksum of message. If message has partition key, need to
-                    // construct it with Key for checkSum to match
+                while (reader.getNext(key, msgValue, msgKey)) {
+                    updateCountersAndProgress();
+
+                    final byte[] bytes = getBytes(msgValue);
+                    final byte[] keyBytes = getBytes(msgKey);
+
+                    // check the checksum of message. If message has partition
+                    // key, need to construct it with Key for checkSum to match
                     //
                     final Message message;
                     if (keyBytes.length == 0) {
@@ -226,104 +202,139 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper<?>> {
 
                     validateKey(message);
 
-                    final long tempTime = System.currentTimeMillis();
-                    final CamusWrapper<?> wrapper;
-                    try {
-                        wrapper = getWrappedRecord(key.getTopic(), bytes);
-                    } catch (Exception e) {
-                        maybePrintException(e);
+                    value = decodeRecord(bytes);
+                    if (value == null) {
                         continue;
                     }
 
-                    if (wrapper == null) {
-                        mapperContext.write(key, new ExceptionWritable(
-                                new RuntimeException("null record")));
-                        continue;
-                    }
-
-                    final long timeStamp = wrapper.getTimestamp();
+                    final long timeStamp = value.getTimestamp();
                     try {
                         key.setTime(timeStamp);
-                        key.setPartition(wrapper.getPartitionMap());
-                        setServerService();
+                        key.setPartition(value.getPartitionMap());
+                        if (ignoreServerServiceList.contains(key.getTopic())
+                                || ignoreServerServiceList.contains("all")) {
+                            key.setServer(DEFAULT_SERVER);
+                            key.setService(DEFAULT_SERVICE);
+                        }
                     } catch (Exception e) {
-                        mapperContext.write(key, new ExceptionWritable(e));
+                        context.write(key, new ExceptionWritable(e));
                         continue;
                     }
 
                     if (timeStamp < beginTimeStamp) {
-                        mapperContext.getCounter("total", "skip-old")
-                                .increment(1);
+                        // skip records until we reach our time to begin
+                        // processing
+                        //
+                        context.getCounter("total", "skip-old").increment(1);
+                        continue;
                     } else if (endTimeStamp == 0) {
-                        DateTime time = new DateTime(timeStamp);
-                        statusMsg += " begin read at " + time.toString();
-                        context.setStatus(statusMsg);
-                        log.info(key.getTopic() + " begin read at "
-                                + time.toString());
-                        endTimeStamp = (time.plusHours(this.maxPullHours))
-                                .getMillis();
-                    } else if (timeStamp > endTimeStamp
-                            || System.currentTimeMillis() > maxPullTime) {
-                        if (timeStamp > endTimeStamp)
-                            log.info("Kafka Max history hours reached");
-                        if (System.currentTimeMillis() > maxPullTime)
-                            log.info("Kafka pull time limit reached");
-                        statusMsg += " max read at "
-                                + new DateTime(timeStamp).toString();
-                        context.setStatus(statusMsg);
-                        log.info(key.getTopic() + " max read at "
-                                + new DateTime(timeStamp).toString());
-                        mapperContext.getCounter("total", "request-time(ms)")
-                                .increment(reader.getFetchTime());
+                        setStartStatus(timeStamp);
+                    } else if (timeStamp > endTimeStamp) {
+                        setEndStatus(timeStamp,
+                                "Kafka Max history hours reached for " + key);
                         closeReader();
+                        // break out and try any other partitions that are
+                        // queued
+                        break;
+                    } else if (timeStamp > maxPullTime) {
+                        setEndStatus(timeStamp,
+                                "Kafka task total pull time limit reached");
+                        closeReader();
+                        return false;
                     }
 
-                    long secondTime = System.currentTimeMillis();
-                    value = wrapper;
-                    long decodeTime = ((secondTime - tempTime));
-
-                    mapperContext.getCounter("total", "decode-time(ms)")
-                            .increment(decodeTime);
-
-                    if (reader != null) {
-                        mapperContext.getCounter("total", "request-time(ms)")
-                                .increment(reader.getFetchTime());
-                    }
                     return true;
                 }
-                log.info("Records read : " + count);
-                count = 0;
-                reader = null;
-            } catch (Throwable t) {
-                Exception e = new Exception(t.getLocalizedMessage(), t);
-                e.setStackTrace(t.getStackTrace());
-                mapperContext.write(key, new ExceptionWritable(e));
-                reader = null;
-                continue;
+
+                closeReader();
+            } catch (Exception e) {
+                context.write(key, new ExceptionWritable(e));
+                closeReader();
             }
         }
+    }
+
+    private CamusWrapper<?> decodeRecord(byte[] bytes) throws IOException,
+            InterruptedException {
+        final long decodeStart = System.currentTimeMillis();
+        final CamusWrapper<?> wrapper;
+        try {
+            wrapper = getWrappedRecord(key.getTopic(), bytes);
+        } catch (Exception e) {
+            maybePrintException(e);
+            return null;
+        }
+
+        if (wrapper == null) {
+            context.write(key, new ExceptionWritable(new RuntimeException(
+                    "null record")));
+        } else {
+            long decodeTime = System.currentTimeMillis() - decodeStart;
+            context.getCounter("total", "decode-time(ms)")
+                    .increment(decodeTime);
+        }
+
+        return wrapper;
+    }
+
+    private CamusWrapper<?> getWrappedRecord(String topicName, byte[] payload)
+            throws IOException {
+        CamusWrapper<?> r = null;
+        try {
+            r = decoder.decode(payload);
+        } catch (Exception e) {
+            if (!skipSchemaErrors) {
+                throw new IOException(e);
+            }
+        }
+        return r;
     }
 
     private void maybePrintException(Exception e) throws IOException,
             InterruptedException {
         if (exceptionCount < getMaximumDecoderExceptionsToPrint(context)) {
-            mapperContext.write(key, new ExceptionWritable(e));
+            context.write(key, new ExceptionWritable(e));
             exceptionCount++;
         } else if (exceptionCount == getMaximumDecoderExceptionsToPrint(context)) {
-            exceptionCount = Integer.MAX_VALUE; // Any random
-                                                // value
+            exceptionCount = Integer.MAX_VALUE;
             log.info("The same exception has occured for more than "
                     + getMaximumDecoderExceptionsToPrint(context)
                     + " records. All further exceptions will not be printed");
         }
     }
 
+    private void setEndStatus(long timeStamp, String message)
+            throws IOException {
+        log.info(message);
+        DateTime time = new DateTime(timeStamp);
+        statusMsgBuilder.append(" max read at ").append(time.toString());
+        context.setStatus(statusMsgBuilder.toString());
+        log.info(key.getTopic() + " max read at " + time.toString());
+    }
+
+    private void setStartStatus(final long timeStamp) {
+        DateTime time = new DateTime(timeStamp);
+        statusMsgBuilder.append(" begin read at ").append(time.toString());
+        context.setStatus(statusMsgBuilder.toString());
+        log.info(key.getTopic() + " begin read at " + time.toString());
+        endTimeStamp = (time.plusHours(this.maxPullHours)).getMillis();
+    }
+
+    private void updateCountersAndProgress() {
+        context.progress();
+        context.getCounter("total", "data-read")
+                .increment(msgValue.getLength());
+        context.getCounter("total", "event-count").increment(1);
+        context.getCounter("total", "request-time(ms)").increment(
+                reader.getFetchTime());
+    }
+
     private void validateKey(Message message) throws ChecksumException {
         long checksum = key.getChecksum();
         if (checksum != message.checksum()) {
             throw new ChecksumException("Invalid message checksum "
-                    + message.checksum() + ". Expected "
-                    + key.getChecksum(), key.getOffset());
+                    + message.checksum() + ". Expected " + key.getChecksum(),
+                    key.getOffset());
         }
     }
 
@@ -333,6 +344,8 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper<?>> {
             return false;
         }
 
+        // will cause endTimeStamp to be reset
+        //
         if (maxPullHours > 0) {
             endTimeStamp = 0;
         }
@@ -340,27 +353,31 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper<?>> {
         key.set(request.getTopic(), request.getLeaderId(),
                 request.getPartition(), request.getOffset(),
                 request.getOffset(), 0);
+
         value = null;
+
         log.info("\n\ntopic:" + request.getTopic() + " partition:"
                 + request.getPartition() + " beginOffset:"
                 + request.getOffset() + " estimatedLastOffset:"
                 + request.getLastOffset());
 
-        statusMsg += statusMsg.length() > 0 ? "; " : "";
-        statusMsg += request.getTopic() + ":"
-                + request.getLeaderId() + ":"
-                + request.getPartition();
-        context.setStatus(statusMsg);
-
-        if (reader != null) {
-            closeReader();
+        if (statusMsgBuilder.length() > 0) {
+            statusMsgBuilder.append("; ");
         }
-        reader = new KafkaReader(context, request,
-                CamusJob.getKafkaTimeoutValue(mapperContext),
-                CamusJob.getKafkaBufferSize(mapperContext));
+        statusMsgBuilder.append(request.getTopic()).append(":")
+                .append(request.getLeaderId()).append(":")
+                .append(request.getPartition());
+        context.setStatus(statusMsgBuilder.toString());
 
-        decoder = MessageDecoderFactory.createMessageDecoder(
-                context, request.getTopic());
+        closeReader();
+
+        reader = new KafkaReader(context, request,
+                CamusJob.getKafkaTimeoutValue(context),
+                CamusJob.getKafkaBufferSize(context));
+
+        decoder = MessageDecoderFactory.createMessageDecoder(context,
+                request.getTopic());
+
         return true;
     }
 
@@ -374,14 +391,6 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper<?>> {
             } finally {
                 reader = null;
             }
-        }
-    }
-
-    public void setServerService() {
-        if (ignoreServerServiceList.contains(key.getTopic())
-                || ignoreServerServiceList.contains("all")) {
-            key.setServer(DEFAULT_SERVER);
-            key.setService(DEFAULT_SERVICE);
         }
     }
 

@@ -12,7 +12,7 @@ import org.apache.hadoop.mapreduce.InputSplit;
 import com.linkedin.camus.etl.kafka.common.EtlRequest;
 
 public class EtlSplit extends InputSplit implements Writable {
-    private List<EtlRequest> requests = new ArrayList<EtlRequest>();
+    private final List<EtlRequest> requests = new ArrayList<EtlRequest>();
     private long length = 0;
 
     @Override
