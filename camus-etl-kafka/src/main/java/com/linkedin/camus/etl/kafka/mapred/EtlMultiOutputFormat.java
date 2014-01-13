@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
@@ -271,17 +272,16 @@ public class EtlMultiOutputFormat extends FileOutputFormat<EtlKey, Object> {
         private String currentTopic = "";
         private long beginTimeStamp = 0;
 
-        private final Map<String, RecordWriter<IEtlKey, CamusWrapper<?>>> dataWriters = new HashMap<String, RecordWriter<IEtlKey, CamusWrapper<?>>>();
+        private final Map<String, RecordWriter<IEtlKey, CamusWrapper<?>>> dataWriters = new HashMap<>();
 
         public MultiEtlRecordWriter(TaskAttemptContext context)
                 throws IOException, InterruptedException {
             this.context = context;
-            errorWriter = SequenceFile.createWriter(
-                    FileSystem.get(context.getConfiguration()),
-                    context.getConfiguration(),
-                    new Path(committer.getWorkPath(), getUniqueFile(context,
-                            ERRORS_PREFIX, "")), EtlKey.class,
-                    ExceptionWritable.class);
+            errorWriter = SequenceFile.createWriter(context.getConfiguration(),
+                    SequenceFile.Writer.file(new Path(committer.getWorkPath(),
+                            getUniqueFile(context, ERRORS_PREFIX, ""))),
+                    SequenceFile.Writer.keyClass(EtlKey.class),
+                    SequenceFile.Writer.valueClass(ExceptionWritable.class));
 
             if (EtlInputFormat.getKafkaMaxHistoricalDays(context) != -1) {
                 int maxDays = EtlInputFormat.getKafkaMaxHistoricalDays(context);
@@ -380,8 +380,7 @@ public class EtlMultiOutputFormat extends FileOutputFormat<EtlKey, Object> {
 
         @Override
         public void commitTask(TaskAttemptContext context) throws IOException {
-
-            ArrayList<Map<String, Object>> allCountObject = new ArrayList<Map<String, Object>>();
+            List<Map<String, Object>> allCountObject = new ArrayList<Map<String, Object>>();
             FileSystem fs = FileSystem.get(context.getConfiguration());
             if (isRunMoveData(context)) {
                 Path workPath = super.getWorkPath();
@@ -434,10 +433,12 @@ public class EtlMultiOutputFormat extends FileOutputFormat<EtlKey, Object> {
                         / 1000);
             }
 
-            SequenceFile.Writer offsetWriter = SequenceFile.createWriter(fs,
-                    context.getConfiguration(), new Path(super.getWorkPath(),
-                            getUniqueFile(context, OFFSET_PREFIX, "")),
-                    EtlKey.class, NullWritable.class);
+            SequenceFile.Writer offsetWriter = SequenceFile.createWriter(
+                    context.getConfiguration(), SequenceFile.Writer
+                            .file(new Path(super.getWorkPath(), getUniqueFile(
+                                    context, OFFSET_PREFIX, ""))),
+                    SequenceFile.Writer.keyClass(EtlKey.class),
+                    SequenceFile.Writer.valueClass(NullWritable.class));
             for (String s : offsets.keySet()) {
                 offsetWriter.append(offsets.get(s), NullWritable.get());
             }

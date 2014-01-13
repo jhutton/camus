@@ -3,6 +3,7 @@ package com.linkedin.camus.etl.kafka.common;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Properties;
@@ -31,8 +32,6 @@ public class EtlCounts {
 
     private static Logger log = Logger.getLogger(EtlCounts.class);
     private static final String TOPIC = "topic";
-    private static final String SERVER = "server";
-    private static final String SERVICE = "service";
     private static final String GRANULARITY = "granularity";
     private static final String COUNTS = "counts";
     private static final String START_TIME = "startTime";
@@ -40,8 +39,6 @@ public class EtlCounts {
     private static final String FIRST_TIMESTAMP = "firstTimestamp";
     private static final String LAST_TIMESTAMP = "lastTimestamp";
     private static final String ERROR_COUNT = "errorCount";
-    private static final String START = "start";
-    private static final String COUNT = "count";
 
     private String topic;
     private long startTime;
@@ -179,7 +176,7 @@ public class EtlCounts {
     }
 
     public void writeCountsToHDFS(
-            ArrayList<Map<String, Object>> allCountObject, FileSystem fs,
+            List<Map<String, Object>> allCountObject, FileSystem fs,
             Path path) throws IOException {
         Map<String, Object> countFile = new HashMap<String, Object>();
         countFile.put(TOPIC, topic);
