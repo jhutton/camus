@@ -126,23 +126,6 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper<?>> {
         }
     }
 
-    private static byte[] getBytes(BytesWritable val) {
-        byte[] buffer = val.getBytes();
-
-        /*
-         * FIXME: remove the following part once the below jira is fixed
-         * https://issues.apache.org/jira/browse/HADOOP-6298
-         */
-        long len = val.getLength();
-        byte[] bytes = buffer;
-        if (len < buffer.length) {
-            bytes = new byte[(int) len];
-            System.arraycopy(buffer, 0, bytes, 0, (int) len);
-        }
-
-        return bytes;
-    }
-
     @Override
     public float getProgress() throws IOException {
         if (getPos() == 0) {
@@ -187,22 +170,22 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper<?>> {
                 while (reader.getNext(key, msgValue, msgKey)) {
                     updateCountersAndProgress();
 
-                    final byte[] bytes = getBytes(msgValue);
-                    final byte[] keyBytes = getBytes(msgKey);
+                    final byte[] valueBytes = msgValue.copyBytes();
+                    final byte[] keyBytes = msgKey.copyBytes();
 
                     // check the checksum of message. If message has partition
                     // key, need to construct it with Key for checkSum to match
                     //
                     final Message message;
                     if (keyBytes.length == 0) {
-                        message = new Message(bytes);
+                        message = new Message(valueBytes);
                     } else {
-                        message = new Message(bytes, keyBytes);
+                        message = new Message(valueBytes, keyBytes);
                     }
 
                     validateKey(message);
 
-                    value = decodeRecord(bytes);
+                    value = decodeRecord(valueBytes);
                     if (value == null) {
                         continue;
                     }
