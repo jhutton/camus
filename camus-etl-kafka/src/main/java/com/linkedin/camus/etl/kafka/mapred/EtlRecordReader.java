@@ -324,10 +324,7 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper<?>> {
             endTimeStamp = 0;
         }
 
-        key.set(request.getTopic(), request.getLeaderId(),
-                request.getPartition(), request.getOffset(),
-                request.getOffset(), 0);
-
+        key.clear();
         value = null;
 
         log.info("\n\ntopic:" + request.getTopic() + " partition:"
