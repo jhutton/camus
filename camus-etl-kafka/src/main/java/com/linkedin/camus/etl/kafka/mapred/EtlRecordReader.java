@@ -1,13 +1,12 @@
 package com.linkedin.camus.etl.kafka.mapred;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.HashSet;
 import java.util.Set;
 
 import kafka.message.Message;
 
-import org.apache.hadoop.fs.ChecksumException;
-import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.JobContext;
@@ -35,8 +34,6 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper<?>> {
     private Mapper<EtlKey, Writable, EtlKey, Writable>.Context context;
 
     private boolean skipSchemaErrors = false;
-    private final BytesWritable msgValue = new BytesWritable();
-    private final BytesWritable msgKey = new BytesWritable();
     private final EtlKey key = new EtlKey();
     private CamusWrapper<?> value;
 
@@ -167,23 +164,12 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper<?>> {
                     }
                 }
 
-                while (reader.getNext(key, msgValue, msgKey)) {
-                    updateCountersAndProgress();
+                Message message;
 
-                    final byte[] valueBytes = msgValue.copyBytes();
-                    final byte[] keyBytes = msgKey.copyBytes();
+                while ((message = reader.getNext(key)) != null) {
+                    updateCountersAndProgress(message.size());
 
-                    // check the checksum of message. If message has partition
-                    // key, need to construct it with Key for checkSum to match
-                    //
-                    final Message message;
-                    if (keyBytes.length == 0) {
-                        message = new Message(valueBytes);
-                    } else {
-                        message = new Message(valueBytes, keyBytes);
-                    }
-
-                    validateKey(message);
+                    final byte[] valueBytes = getValueBytes(message);
 
                     value = decodeRecord(valueBytes);
                     if (value == null) {
@@ -295,6 +281,20 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper<?>> {
         log.info(key.getTopic() + " max read at " + time.toString());
     }
 
+    /**
+     * Get the value bytes from the specified message.
+     *
+     * @param message the message
+     * @return the bytes making up the value
+     */
+    private byte[] getValueBytes(Message message) {
+        ByteBuffer messagePayload = message.payload();
+        int payloadSize = messagePayload.remaining();
+        byte[] payloadData = new byte[payloadSize];
+        messagePayload.get(payloadData, messagePayload.position(), payloadSize);
+        return payloadData;
+    }
+
     private void setStartStatus(final long timeStamp) {
         DateTime time = new DateTime(timeStamp);
         statusMsgBuilder.append(" begin read at ").append(time.toString());
@@ -303,22 +303,13 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper<?>> {
         endTimeStamp = (time.plusHours(this.maxPullHours)).getMillis();
     }
 
-    private void updateCountersAndProgress() {
+    private void updateCountersAndProgress(int dataRead) {
         context.progress();
         context.getCounter("total", "data-read")
-                .increment(msgValue.getLength());
+                .increment(dataRead);
         context.getCounter("total", "event-count").increment(1);
         context.getCounter("total", "request-time(ms)").increment(
                 reader.getFetchTime());
-    }
-
-    private void validateKey(Message message) throws ChecksumException {
-        long checksum = key.getChecksum();
-        if (checksum != message.checksum()) {
-            throw new ChecksumException("Invalid message checksum "
-                    + message.checksum() + ". Expected " + key.getChecksum(),
-                    key.getOffset());
-        }
     }
 
     private boolean initReaderWithSplit() throws IOException, Exception {

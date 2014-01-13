@@ -90,23 +90,16 @@ public class KafkaReader {
     }
 
     /**
-     * Fetches the next Kafka message and stuffs the results into the specified message key
-     * and value.
+     * Fetches the next Kafka message and returns it to the caller.
      *
      * @param key the etl key
-     * @param msgValue the message value
-     * @param msgKey the message key
-     * @return true if a value was retrieved and set else false
+     * @return a message or null
      * @throws IOException
      */
-    public boolean getNext(EtlKey key, BytesWritable msgValue, BytesWritable msgKey)
-            throws IOException {
+    public Message getNext(EtlKey key) throws IOException {
         if (hasNext()) {
             MessageAndOffset msgAndOffset = messageIter.next();
             Message message = msgAndOffset.message();
-
-            setMsgKey(msgKey, message);
-            setMsgValue(msgValue, message);
 
             key.clear();
             key.set(kafkaRequest.getTopic(), kafkaRequest.getLeaderId(),
@@ -115,42 +108,10 @@ public class KafkaReader {
 
             currentOffset = msgAndOffset.offset() + 1; // increase offset
             currentCount++; // increase count
-            return true;
-        } else {
-            return false;
+            return message;
         }
-    }
 
-    /**
-     * Extract the key from the specified message and populate the specified {@code msgKey} reference
-     * with the data.
-     *
-     * @param msgKey the message key to populate
-     * @param message the message
-     */
-    private void setMsgKey(BytesWritable msgKey, Message message) {
-        ByteBuffer messageKey = message.key();
-        if (messageKey != null) {
-            int keySize = messageKey.remaining();
-            byte[] keyData = new byte[keySize];
-            messageKey.get(keyData, messageKey.position(), keySize);
-            msgKey.set(keyData, 0, keySize);
-        }
-    }
-
-    /**
-     * Extract the payload from the specified message and populate the specified {@code msgValue} reference
-     * with the data.
-     *
-     * @param msgValue the message value to populate.
-     * @param message the message
-     */
-    private void setMsgValue(BytesWritable msgValue, Message message) {
-        ByteBuffer messagePayload = message.payload();
-        int payloadSize = messagePayload.remaining();
-        byte[] payloadData = new byte[payloadSize];
-        messagePayload.get(payloadData, messagePayload.position(), payloadSize);
-        msgValue.set(payloadData, 0, payloadSize);
+        return null;
     }
 
     /**
@@ -209,17 +170,24 @@ public class KafkaReader {
                         // flag = true;
                         skipped++;
                     } else {
-                        log.debug("Skipped offsets till : " + message.offset());
+                        if (log.isDebugEnabled()) {
+                            log.debug("Skipped offsets till : " + message.offset());
+                        }
                         break;
                     }
                 }
 
-                log.debug("Number of offsets to be skipped: " + skipped);
+                if (log.isDebugEnabled()) {
+                    log.debug("Number of offsets to be skipped: " + skipped);
+                }
+
                 messageIter = messageBuffer.iterator();
 
                 while (skipped != 0) {
                     MessageAndOffset skippedMessage = messageIter.next();
-                    log.debug("Skipping offset : " + skippedMessage.offset());
+                    if (log.isDebugEnabled()) {
+                        log.debug("Skipping offset : " + skippedMessage.offset());
+                    }
                     skipped--;
                 }
 
