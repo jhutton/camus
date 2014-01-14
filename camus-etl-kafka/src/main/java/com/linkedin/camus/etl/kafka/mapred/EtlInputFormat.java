@@ -217,9 +217,7 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper<?>> {
                 context, topicAndPartitionByLeaderMap);
 
         Collections.sort(finalRequests);
-        writeRequests(finalRequests, context);
-        Map<EtlRequest, EtlKey> largestOffsetKeys = getLargestPreviousOffsets(
-                FileInputFormat.getInputPaths(context), context);
+        Map<EtlRequest, EtlKey> largestOffsetKeys = getLargestPreviousOffsets(context);
 
         Set<String> moveToLatestTopics = getMoveToLatestTopicsSet(context);
 
@@ -237,7 +235,8 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper<?>> {
             }
 
             if (request.getOffset() < request.getEarliestOffset()) {
-                log.warn("The request offset in was found to be less than the earliest offset available in request:\n" + request);
+                log.warn("The request offset was found to be less than the earliest offset available in request:\n"
+                        + request);
                 log.warn("Moving to the earliest offset");
 
                 request.setOffset(request.getEarliestOffset());
@@ -245,18 +244,23 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper<?>> {
                         request.getLeaderId(), request.getPartition(), 0,
                         request.getLatestOffset()));
             } else if (request.getOffset() > request.getLatestOffset()) {
-                log.warn("The request offset was found to be greater than the latest offset available in request:\n" + request);
+                log.warn("The request offset was found to be greater than the latest offset available in request:\n"
+                        + request);
                 log.warn("Moving to the latest offset");
 
                 request.setOffset(request.getLatestOffset());
-                largestOffsetKeys.put(request, new EtlKey(request.getTopic(),
-                        request.getLeaderId(), request.getPartition(), request.getLatestOffset(),
-                        request.getLatestOffset()));
+                largestOffsetKeys.put(
+                        request,
+                        new EtlKey(request.getTopic(), request.getLeaderId(),
+                                request.getPartition(), request
+                                        .getLatestOffset(), request
+                                        .getLatestOffset()));
             }
 
             log.info(request);
         }
 
+        writeRequests(finalRequests, context);
         writePreviousEtlKeys(largestOffsetKeys.values(), context);
 
         CamusJob.stopTiming("getSplits");
@@ -530,8 +534,9 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper<?>> {
         }
     }
 
-    private Map<EtlRequest, EtlKey> getLargestPreviousOffsets(Path[] inputs,
-            JobContext context) throws IOException {
+    private Map<EtlRequest, EtlKey> getLargestPreviousOffsets(JobContext context)
+            throws IOException {
+        Path[] inputs = FileInputFormat.getInputPaths(context);
         Map<EtlRequest, EtlKey> offsetKeysMap = new HashMap<>();
 
         for (Path input : inputs) {
