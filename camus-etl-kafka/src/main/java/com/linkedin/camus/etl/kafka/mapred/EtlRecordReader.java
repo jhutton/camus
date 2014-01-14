@@ -310,7 +310,7 @@ public class EtlRecordReader<T> extends RecordReader<EtlKey, CamusWrapper<T>> {
         log.info("\n\ntopic:" + request.getTopic() + " partition:"
                 + request.getPartition() + " beginOffset:"
                 + request.getOffset() + " estimatedLastOffset:"
-                + request.getLastOffset());
+                + request.getLatestOffset());
 
         if (statusMsgBuilder.length() > 0) {
             statusMsgBuilder.append("; ");

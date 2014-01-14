@@ -64,7 +64,7 @@ public class KafkaReader {
 
         beginOffset = request.getOffset();
         currentOffset = request.getOffset();
-        lastOffset = request.getLastOffset();
+        lastOffset = request.getLatestOffset();
 
         // read data from queue
 

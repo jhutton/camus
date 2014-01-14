@@ -17,7 +17,8 @@ import kafka.javaapi.consumer.SimpleConsumer;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.mapreduce.JobContext;
-import org.apache.log4j.Logger;
+
+import com.linkedin.camus.etl.kafka.CamusJob;
 
 /**
  * A class that represents the kafka pull request.
@@ -28,20 +29,18 @@ import org.apache.log4j.Logger;
  *
  * @author Richard Park
  */
-public class EtlRequest implements Writable {
-
-    private static Logger log = Logger.getLogger(EtlRequest.class);
-    private JobContext context = null;
-    private static final long DEFAULT_OFFSET = 0;
+public class EtlRequest implements Writable, Comparable<EtlRequest> {
+    private static final long DEFAULT_OFFSET = -1;
 
     private String topic = "";
     private String leaderId = "";
     private int partition = 0;
 
-    private URI uri = null;
+    private JobContext context;
+    private URI uri;
     private long offset = DEFAULT_OFFSET;
-    private long latestOffset = -1;
-    private long earliestOffset = -2;
+    private long latestOffset = DEFAULT_OFFSET;
+    private long earliestOffset = DEFAULT_OFFSET;
 
     public EtlRequest() {
     }
@@ -56,33 +55,9 @@ public class EtlRequest implements Writable {
         this.earliestOffset = other.earliestOffset;
     }
 
-    public void setLatestOffset(long latestOffset) {
-        this.latestOffset = latestOffset;
-    }
-
-    public void setEarliestOffset(long earliestOffset) {
-        this.earliestOffset = earliestOffset;
-    }
-
     /**
-     * Constructor for a KafkaETLRequest with the uri set to null and offset set
-     * to 0. Both of these attributes can be set later. These attributes are
-     * sufficient to ensure uniqueness.
-     *
-     * @param topic
-     *            The topic name
-     * @param leaderId
-     *            The leader broker for this partition and topic
-     * @param partition
-     *            The partition to pull
-     */
-    public EtlRequest(JobContext context, String topic, String leaderId,
-            int partition) {
-        this(context, topic, leaderId, partition, null, DEFAULT_OFFSET);
-    }
-
-    /**
-     * Constructor for the KafkaETLRequest with the offset to 0.
+     * Constructor for the KafkaETLRequest with the offsets set to default
+     * values.
      *
      * @param topic
      *            The topic name
@@ -95,31 +70,20 @@ public class EtlRequest implements Writable {
      */
     public EtlRequest(JobContext context, String topic, String leaderId,
             int partition, URI brokerUri) {
-        this(context, topic, leaderId, partition, brokerUri, DEFAULT_OFFSET);
-    }
-
-    /**
-     * Constructor for the full kafka pull job. Neither the brokerUri nor offset
-     * are used to ensure uniqueness.
-     *
-     * @param topic
-     *            The topic name
-     * @param leaderId
-     *            The leader broker for this topic and partition
-     * @param partition
-     *            The partition to pull
-     * @param brokerUri
-     *            The uri for the broker
-     * @param offset
-     */
-    public EtlRequest(JobContext context, String topic, String leaderId,
-            int partition, URI brokerUri, long offset) {
         this.context = context;
         this.topic = topic;
         this.leaderId = leaderId;
         this.uri = brokerUri;
         this.partition = partition;
-        setOffset(offset);
+    }
+
+    @Override
+    public int compareTo(EtlRequest o) {
+        if (!topic.equals(o.topic)) {
+            return topic.compareTo(o.topic);
+        } else {
+            return partition - o.partition;
+        }
     }
 
     /**
@@ -164,7 +128,7 @@ public class EtlRequest implements Writable {
      * @return
      */
     public URI getURI() {
-        return this.uri;
+        return uri;
     }
 
     /**
@@ -173,7 +137,7 @@ public class EtlRequest implements Writable {
      * @return
      */
     public int getPartition() {
-        return this.partition;
+        return partition;
     }
 
     /**
@@ -182,113 +146,106 @@ public class EtlRequest implements Writable {
      * @return
      */
     public long getOffset() {
-        return this.offset;
+        return offset;
     }
 
     public void setLeaderId(String leaderId) {
         this.leaderId = leaderId;
     }
 
-    /**
-     * Returns true if the offset is valid (>= to earliest offset && <= to last
-     * offset)
-     *
-     * @return
-     */
-    public boolean isValidOffset() {
-        return this.offset >= 0;
-    }
-
-    @Override
-    public String toString() {
-        return topic + "\turi:" + (uri != null ? uri.toString() : "")
-                + "\tleader:" + leaderId + "\tpartition:" + partition
-                + "\toffset:" + offset + "\tlatest_offset:" + getLastOffset();
-    }
-
-    @Override
-    public int hashCode() {
-        return (partition + topic).hashCode();
-    }
-
-    @Override
-    public boolean equals(Object other) {
-        return this.hashCode() == other.hashCode();
-    }
-
-    /**
-     * Returns the copy of KafkaETLRequest
-     */
-    @Override
-    public EtlRequest clone() {
-        return new EtlRequest(context, topic, leaderId, partition, uri, offset);
-    }
-
     public long getEarliestOffset() {
-        if (this.earliestOffset == -2 && uri != null) {
-            // TODO : Make the hardcoded paramters configurable
-            SimpleConsumer consumer = new SimpleConsumer(uri.getHost(),
-                    uri.getPort(), 60000, 1024 * 1024, "hadoop-etl");
-            Map<TopicAndPartition, PartitionOffsetRequestInfo> offsetInfo = new HashMap<TopicAndPartition, PartitionOffsetRequestInfo>();
-            offsetInfo.put(
-                    new TopicAndPartition(topic, partition),
-                    new PartitionOffsetRequestInfo(kafka.api.OffsetRequest
-                            .EarliestTime(), 1));
+        if (earliestOffset == -1) {
+            SimpleConsumer consumer = createSimpleConsumer();
+
+            try {
+                Map<TopicAndPartition, PartitionOffsetRequestInfo> offsetInfo = new HashMap<>();
+                offsetInfo.put(
+                        new TopicAndPartition(topic, partition),
+                        new PartitionOffsetRequestInfo(kafka.api.OffsetRequest
+                                .EarliestTime(), 1));
+
+                OffsetResponse response = consumer
+                        .getOffsetsBefore(new OffsetRequest(offsetInfo,
+                                kafka.api.OffsetRequest.CurrentVersion(),
+                                CamusJob.getKafkaClientName(context)));
+
+                long[] offsets = response.offsets(topic, partition);
+
+                if (offsets.length > 0) {
+                    this.earliestOffset = offsets[0];
+                }
+            } finally {
+                consumer.close();
+            }
+        }
+
+        return earliestOffset;
+    }
+
+    public void setEarliestOffset(long earliestOffset) {
+        this.earliestOffset = earliestOffset;
+    }
+
+    public long getLatestOffset() {
+        if (latestOffset == -1) {
+            this.latestOffset = getLatestOffset(kafka.api.OffsetRequest
+                    .LatestTime());
+        }
+
+        return latestOffset;
+    }
+
+    public long getLatestOffset(long timestamp) {
+        SimpleConsumer consumer = createSimpleConsumer();
+
+        try {
+            Map<TopicAndPartition, PartitionOffsetRequestInfo> offsetInfo = new HashMap<>();
+            offsetInfo.put(new TopicAndPartition(topic, partition),
+                    new PartitionOffsetRequestInfo(timestamp, 1));
+
             OffsetResponse response = consumer
                     .getOffsetsBefore(new OffsetRequest(offsetInfo,
-                            kafka.api.OffsetRequest.CurrentVersion(),
-                            "hadoop-etl"));
-            long[] endOffset = response.offsets(topic, partition);
+                            kafka.api.OffsetRequest.CurrentVersion(), CamusJob
+                                    .getKafkaClientName(context)));
+
+            long[] offsets = response.offsets(topic, partition);
+
+            if (offsets.length > 0) {
+                return offsets[0];
+            } else {
+                // if no information is found, set the offset at the beginning
+                return 0;
+            }
+        } finally {
             consumer.close();
-            this.earliestOffset = endOffset[0];
-            return endOffset[0];
-        } else {
-            return this.earliestOffset;
         }
     }
 
-    public long getLastOffset() {
-        if (this.latestOffset == -1 && uri != null)
-            return getLastOffset(kafka.api.OffsetRequest.LatestTime());
-        else {
-            return this.latestOffset;
-        }
-    }
-
-    public long getLastOffset(long time) {
-        SimpleConsumer consumer = new SimpleConsumer(uri.getHost(),
-                uri.getPort(), 60000, 1024 * 1024, "hadoop-etl");
-        Map<TopicAndPartition, PartitionOffsetRequestInfo> offsetInfo = new HashMap<TopicAndPartition, PartitionOffsetRequestInfo>();
-        offsetInfo.put(new TopicAndPartition(topic, partition),
-                new PartitionOffsetRequestInfo(time, 1));
-        OffsetResponse response = consumer.getOffsetsBefore(new OffsetRequest(
-                offsetInfo, kafka.api.OffsetRequest.CurrentVersion(),
-                "hadoop-etl"));
-        long[] endOffset = response.offsets(topic, partition);
-        consumer.close();
-        if (endOffset.length == 0) {
-            log.info("The exception is thrown because the latest offset retunred zero for topic : "
-                    + topic + " and partition " + partition);
-        }
-        this.latestOffset = endOffset[0];
-        return endOffset[0];
-    }
-
-    public long estimateDataSize() {
-        long endOffset = getLastOffset();
-        return endOffset - offset;
+    public void setLatestOffset(long latestOffset) {
+        this.latestOffset = latestOffset;
     }
 
     /**
-     * Estimates the request size in bytes by connecting to the broker and
-     * querying for the offset that bets matches the endTime.
+     * Get the difference between the request offset and the latest offset.
+     *
+     * @return the difference in offsets or message count
+     */
+    public long estimateDataSize() {
+        long latestOffset = getLatestOffset();
+        return latestOffset - offset;
+    }
+
+    /**
+     * Get the difference between the request offset and the latest offset based
+     * on the specified end time.
      *
      * @param endTime
-     *            The time in millisec
+     *            the end time in milliseconds
+     * @return the difference in offsets or message count
      */
     public long estimateDataSize(long endTime) {
-        long endOffset = getLastOffset(endTime);
-        return endOffset - offset;
+        long latestOffset = getLatestOffset(endTime);
+        return latestOffset - offset;
     }
 
     @Override
@@ -296,12 +253,13 @@ public class EtlRequest implements Writable {
         topic = Text.readString(in);
         leaderId = Text.readString(in);
         String str = Text.readString(in);
-        if (!str.isEmpty())
+        if (!str.isEmpty()) {
             try {
                 uri = new URI(str);
             } catch (URISyntaxException e) {
                 throw new RuntimeException(e);
             }
+        }
         partition = in.readInt();
         offset = in.readLong();
         latestOffset = in.readLong();
@@ -311,12 +269,74 @@ public class EtlRequest implements Writable {
     public void write(DataOutput out) throws IOException {
         Text.writeString(out, topic);
         Text.writeString(out, leaderId);
-        if (uri != null)
+        if (uri != null) {
             Text.writeString(out, uri.toString());
-        else
+        } else {
             Text.writeString(out, "");
+        }
         out.writeInt(partition);
         out.writeLong(offset);
         out.writeLong(latestOffset);
+    }
+
+    /**
+     * Returns the copy of KafkaETLRequest
+     */
+    @Override
+    public EtlRequest clone() {
+        EtlRequest request = new EtlRequest(context, topic, leaderId,
+                partition, uri);
+        request.setEarliestOffset(earliestOffset);
+        request.setLatestOffset(latestOffset);
+        request.setOffset(offset);
+        return request;
+    }
+
+    @Override
+    public String toString() {
+        return topic + "\turi:" + (uri != null ? uri.toString() : "")
+                + "\tleader:" + leaderId + "\tpartition:" + partition
+                + "\tearliest_offset:" + earliestOffset + "\toffset:" + offset
+                + "\tlatest_offset:" + latestOffset;
+    }
+
+    @Override
+    public int hashCode() {
+        final int prime = 31;
+        int result = 1;
+        result = prime * result + partition;
+        result = prime * result + ((topic == null) ? 0 : topic.hashCode());
+        return result;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj)
+            return true;
+        if (obj == null)
+            return false;
+        if (getClass() != obj.getClass())
+            return false;
+        EtlRequest other = (EtlRequest) obj;
+        if (partition != other.partition)
+            return false;
+        if (topic == null) {
+            if (other.topic != null)
+                return false;
+        } else if (!topic.equals(other.topic))
+            return false;
+        return true;
+    }
+
+    private SimpleConsumer createSimpleConsumer() {
+        if (uri == null) {
+            throw new NullPointerException("uri not set");
+        }
+
+        SimpleConsumer consumer = new SimpleConsumer(uri.getHost(),
+                uri.getPort(), CamusJob.getKafkaTimeoutValue(context),
+                CamusJob.getKafkaBufferSize(context),
+                CamusJob.getKafkaClientName(context));
+        return consumer;
     }
 }
