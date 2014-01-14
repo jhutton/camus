@@ -23,6 +23,7 @@ import org.apache.commons.cli.Options;
 import org.apache.commons.cli.PosixParser;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
+import org.apache.hadoop.filecache.DistributedCache;
 import org.apache.hadoop.fs.ContentSummary;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileStatus;
@@ -33,6 +34,7 @@ import org.apache.hadoop.io.SequenceFile;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.TIPStatus;
+import org.apache.hadoop.mapred.TaskCompletionEvent;
 import org.apache.hadoop.mapred.TaskReport;
 import org.apache.hadoop.mapreduce.Counter;
 import org.apache.hadoop.mapreduce.CounterGroup;
@@ -40,7 +42,6 @@ import org.apache.hadoop.mapreduce.Counters;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.JobContext;
 import org.apache.hadoop.mapreduce.JobID;
-import org.apache.hadoop.mapreduce.TaskCompletionEvent;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.util.Tool;
@@ -162,7 +163,7 @@ public class CamusJob extends Configured implements Tool {
                         log.info("Adding Jar to Distributed Cache Archive File:"
                                 + status[i].getPath());
 
-                        job.addFileToClassPath(status[i].getPath());
+                        DistributedCache.addFileToClassPath(status[i].getPath(), jobConf, fs);
                     }
                 }
             } else {
@@ -178,7 +179,7 @@ public class CamusJob extends Configured implements Tool {
             String[] jarFiles = externalJarList.split(",");
             for (String jarFile : jarFiles) {
                 log.info("Adding external jar File:" + jarFile);
-                job.addFileToClassPath(new Path(jarFile));
+                DistributedCache.addFileToClassPath(new Path(jarFile), jobConf, fs);
             }
         }
 
@@ -297,7 +298,6 @@ public class CamusJob extends Configured implements Tool {
 
         if (!job.isSuccessful()) {
             JobClient client = new JobClient(new JobConf(job.getConfiguration()));
-
             for (TaskCompletionEvent task : job.getTaskCompletionEvents(0)) {
                 JobID jobId = task.getTaskAttemptId().getJobID();
                 org.apache.hadoop.mapred.JobID oldId = org.apache.hadoop.mapred.JobID.downgrade(jobId);
