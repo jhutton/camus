@@ -66,7 +66,7 @@ public class EtlRequest implements Writable {
 
     /**
      * Constructor for a KafkaETLRequest with the uri set to null and offset set
-     * to -1. Both of these attributes can be set later. These attributes are
+     * to 0. Both of these attributes can be set later. These attributes are
      * sufficient to ensure uniqueness.
      *
      * @param topic
@@ -82,7 +82,7 @@ public class EtlRequest implements Writable {
     }
 
     /**
-     * Constructor for the KafkaETLRequest with the offset to -1.
+     * Constructor for the KafkaETLRequest with the offset to 0.
      *
      * @param topic
      *            The topic name

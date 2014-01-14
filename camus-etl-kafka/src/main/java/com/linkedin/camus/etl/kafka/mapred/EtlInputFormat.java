@@ -131,16 +131,16 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper<?>> {
      * Gets the latest offsets and create the requests as needed
      *
      * @param context
-     * @param offsetRequestInfo
+     * @param topicAndPartionByLeaderMap
      * @return
      */
     public List<EtlRequest> fetchLatestOffsetAndCreateEtlRequests(
             JobContext context,
-            Map<LeaderInfo, List<TopicAndPartition>> offsetRequestInfo) {
+            Map<LeaderInfo, List<TopicAndPartition>> topicAndPartionByLeaderMap) {
         final List<EtlRequest> finalRequests = new ArrayList<EtlRequest>();
-        for (LeaderInfo leader : offsetRequestInfo.keySet()) {
+        for (LeaderInfo leader : topicAndPartionByLeaderMap.keySet()) {
             SimpleConsumer consumer = createSimpleConsumer(context, leader);
-            List<TopicAndPartition> topicAndPartitions = offsetRequestInfo
+            List<TopicAndPartition> topicAndPartitions = topicAndPartionByLeaderMap
                     .get(leader);
 
             // Latest Offset request info
@@ -154,6 +154,7 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper<?>> {
             // Earliest Offset request info
             PartitionOffsetRequestInfo partitionEarliestOffsetRequestInfo = new PartitionOffsetRequestInfo(
                     kafka.api.OffsetRequest.EarliestTime(), 1);
+
             OffsetResponse earliestOffsetResponse = getOffsetResponse(context,
                     consumer, topicAndPartitions,
                     partitionEarliestOffsetRequestInfo);
@@ -201,16 +202,17 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper<?>> {
     public List<InputSplit> getSplits(JobContext context) throws IOException,
             InterruptedException {
         CamusJob.startTiming("getSplits");
-        Map<LeaderInfo, List<TopicAndPartition>> offsetRequestInfo = getOffsetRequestInfo(context);
-        if (offsetRequestInfo == null) {
+        Map<LeaderInfo, List<TopicAndPartition>> topicAndPartitionByLeaderMap = getTopicPartitionInfoByLeader(context);
+        if (topicAndPartitionByLeaderMap == null) {
             // failed getting broker metadata
             //
             return null;
         }
 
-        // Get the latest offsets and generate the EtlRequests
+        // Get the latest offsets and generate the EtlRequests. The requests will have the
+        // earliest and latest offsets reported by the leader of each partition set
         List<EtlRequest> finalRequests = fetchLatestOffsetAndCreateEtlRequests(
-                context, offsetRequestInfo);
+                context, topicAndPartitionByLeaderMap);
 
         Collections.sort(finalRequests, new Comparator<EtlRequest>() {
             @Override
@@ -328,10 +330,13 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper<?>> {
                 topicAndPartition.topic(), topicAndPartition.partition())[0];
         long earliestOffset = earliestOffsetResponse.offsets(
                 topicAndPartition.topic(), topicAndPartition.partition())[0];
+
+        // create a new etl request. The 'offset' field will be set to the default, 0
         EtlRequest etlRequest = new EtlRequest(context,
                 topicAndPartition.topic(), Integer.toString(leader
                         .getLeaderId()), topicAndPartition.partition(),
                 leader.getUri());
+
         etlRequest.setLatestOffset(latestOffset);
         etlRequest.setEarliestOffset(earliestOffset);
         return etlRequest;
@@ -369,10 +374,10 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper<?>> {
         }
     }
 
-    private Map<LeaderInfo, List<TopicAndPartition>> getOffsetRequestInfo(
+    private Map<LeaderInfo, List<TopicAndPartition>> getTopicPartitionInfoByLeader(
             JobContext context) {
         try {
-            Map<LeaderInfo, List<TopicAndPartition>> offsetRequestInfo = new HashMap<LeaderInfo, List<TopicAndPartition>>();
+            Map<LeaderInfo, List<TopicAndPartition>> offsetRequestInfo = new HashMap<>();
 
             // Get Metadata for all topics
             List<TopicMetadata> topicMetadataList = getKafkaMetadata(context);
