@@ -26,12 +26,12 @@ import com.linkedin.camus.etl.kafka.mapred.EtlMultiOutputFormat;
  * Provides a RecordWriter that uses SequenceFile.Writer to write SequenceFiles
  * records to HDFS. Compression settings are controlled via the usual hadoop
  * configuration values.
- * 
+ *
  * - mapreduce.output.fileoutputformat.compress - true or false -
  * mapreduce.output.fileoutputformat.compress.codec -
  * org.apache.hadoop.io.compress.* (SnappyCodec, etc.) -
  * mapreduce.output.fileoutputformat.compress.type - BLOCK or RECORD
- * 
+ *
  */
 public class SequenceFileRecordWriterProvider implements RecordWriterProvider {
     public static final String ETL_OUTPUT_RECORD_DELIMITER = "etl.output.record.delimiter";
@@ -88,9 +88,12 @@ public class SequenceFileRecordWriterProvider implements RecordWriterProvider {
         log.info("Creating new SequenceFile.Writer with compression type "
                 + compressionType + " and compression codec "
                 + compressionCodec.getClass().getName());
-        final SequenceFile.Writer writer = SequenceFile.createWriter(
-                path.getFileSystem(conf), conf, path, LongWritable.class,
-                Text.class, compressionType, compressionCodec, context);
+
+        final SequenceFile.Writer writer = SequenceFile.createWriter(conf,
+                SequenceFile.Writer.file(path), SequenceFile.Writer
+                        .keyClass(LongWritable.class), SequenceFile.Writer
+                        .valueClass(Text.class), SequenceFile.Writer
+                        .compression(compressionType, compressionCodec));
 
         // Return a new anonymous RecordWriter that uses the
         // SequenceFile.Writer to write data to HDFS
@@ -101,7 +104,8 @@ public class SequenceFileRecordWriterProvider implements RecordWriterProvider {
                 String record = (String) data.getRecord() + recordDelimiter;
                 // Use the timestamp from the EtlKey as the key for this record.
                 // TODO: Is there a better key to use here?
-                writer.append(new LongWritable(key.getTimestamp()), new Text(record));
+                writer.append(new LongWritable(key.getTimestamp()), new Text(
+                        record));
             }
 
             @Override

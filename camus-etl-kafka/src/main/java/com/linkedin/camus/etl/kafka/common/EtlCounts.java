@@ -266,10 +266,10 @@ public class EtlCounts {
         props.put("request.required.acks", "1");
         props.put("request.timeout.ms", "30000");
         log.debug("Broker list: " + brokerList);
-        Producer producer = new Producer(new ProducerConfig(props));
+        Producer<String, byte[]> producer = new Producer<>(new ProducerConfig(props));
         try {
             for (byte[] message : monitorSet) {
-                KeyedMessage keyedMessage = new KeyedMessage(
+                KeyedMessage<String, byte[]> keyedMessage = new KeyedMessage<>(
                         "TrackingMonitoringEvent", message);
                 producer.send(keyedMessage);
             }

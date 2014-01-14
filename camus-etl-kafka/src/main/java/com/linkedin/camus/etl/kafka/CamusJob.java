@@ -23,7 +23,6 @@ import org.apache.commons.cli.Options;
 import org.apache.commons.cli.PosixParser;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
-import org.apache.hadoop.filecache.DistributedCache;
 import org.apache.hadoop.fs.ContentSummary;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileStatus;
@@ -163,9 +162,7 @@ public class CamusJob extends Configured implements Tool {
                         log.info("Adding Jar to Distributed Cache Archive File:"
                                 + status[i].getPath());
 
-                        DistributedCache
-                                .addFileToClassPath(status[i].getPath(),
-                                        jobConf, fs);
+                        job.addFileToClassPath(status[i].getPath());
                     }
                 }
             } else {
@@ -181,8 +178,7 @@ public class CamusJob extends Configured implements Tool {
             String[] jarFiles = externalJarList.split(",");
             for (String jarFile : jarFiles) {
                 log.info("Adding external jar File:" + jarFile);
-                DistributedCache.addFileToClassPath(new Path(jarFile),
-                        jobConf, fs);
+                job.addFileToClassPath(new Path(jarFile));
             }
         }
 
@@ -320,8 +316,8 @@ public class CamusJob extends Configured implements Tool {
             throws IOException {
         for (FileStatus f : fs.listStatus(newExecutionOutput, new PrefixFilter(
                 EtlMultiOutputFormat.ERRORS_PREFIX))) {
-            SequenceFile.Reader reader = new SequenceFile.Reader(fs,
-                    f.getPath(), fs.getConf());
+            SequenceFile.Reader reader = new SequenceFile.Reader(fs.getConf(),
+                    SequenceFile.Reader.file(f.getPath()));
 
             EtlKey key = new EtlKey();
             ExceptionWritable value = new ExceptionWritable();
