@@ -9,6 +9,7 @@ import java.util.List;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.mapreduce.InputSplit;
 
+import com.google.common.base.Objects;
 import com.linkedin.camus.etl.kafka.common.EtlRequest;
 
 public class EtlSplit extends InputSplit implements Writable {
@@ -58,4 +59,13 @@ public class EtlSplit extends InputSplit implements Writable {
         else
             return null;
     }
+
+    @Override
+    public String toString() {
+        return Objects.toStringHelper(this)
+                .add("length", length)
+                .add("requests", requests)
+                .toString();
+    }
+
 }
