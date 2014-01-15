@@ -172,7 +172,9 @@ public class EtlRequest implements Writable, Comparable<EtlRequest> {
                 long[] offsets = response.offsets(topic, partition);
 
                 if (offsets.length > 0) {
-                    this.earliestOffset = offsets[0];
+                    earliestOffset = offsets[0];
+                } else {
+                    earliestOffset = 0;
                 }
             } finally {
                 consumer.close();
