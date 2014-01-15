@@ -10,6 +10,8 @@ import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableComparable;
 
+import com.google.common.base.Objects;
+import com.google.common.base.Objects.ToStringHelper;
 import com.linkedin.camus.etl.IEtlKey;
 
 /**
@@ -39,6 +41,7 @@ public class EtlKey implements WritableComparable<EtlKey>, IEtlKey {
         this.checksum = other.checksum;
         this.topic = other.topic;
         this.timestamp = other.timestamp;
+        this.leaderId = other.leaderId;
         setPartition(other.getPartitionMap());
     }
 
@@ -227,27 +230,19 @@ public class EtlKey implements WritableComparable<EtlKey>, IEtlKey {
 
     @Override
     public String toString() {
-        StringBuilder builder = new StringBuilder();
-        builder.append("topic=");
-        builder.append(topic);
-        builder.append(" partition=");
-        builder.append(partition);
-        builder.append("leaderId=");
-        builder.append(leaderId);
-        builder.append(" beginOffset=");
-        builder.append(beginOffset);
-        builder.append(" offset=");
-        builder.append(offset);
-        builder.append(" checksum=");
-        builder.append(checksum);
-        builder.append(" time=");
-        builder.append(timestamp);
+        ToStringHelper helper = Objects.toStringHelper(this)
+                .add("topic", topic)
+                .add("partition", partition)
+                .add("leaderId", leaderId)
+                .add("beginOffset", beginOffset)
+                .add("offset", offset)
+                .add("checksum", checksum)
+                .add("timestamp", timestamp);
 
         for (Map.Entry<Writable, Writable> e : partitionMap.entrySet()) {
-            builder.append(" " + e.getKey() + "=");
-            builder.append(e.getValue().toString());
+            helper.add(e.getKey().toString(), e.getValue());
         }
 
-        return builder.toString();
+        return helper.toString();
     }
 }
