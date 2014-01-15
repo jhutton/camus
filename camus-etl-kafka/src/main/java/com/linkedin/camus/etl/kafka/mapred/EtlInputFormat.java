@@ -39,6 +39,7 @@ import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.log4j.Logger;
 
+import com.google.common.primitives.Longs;
 import com.linkedin.camus.coders.CamusWrapper;
 import com.linkedin.camus.coders.MessageDecoder;
 import com.linkedin.camus.etl.kafka.CamusJob;
@@ -203,23 +204,21 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper<?>> {
             InterruptedException {
         CamusJob.startTiming("getSplits");
         Map<LeaderInfo, List<TopicAndPartition>> topicAndPartitionByLeaderMap = getTopicPartitionInfoByLeader(context);
+
         if (topicAndPartitionByLeaderMap == null) {
-            // failed getting broker metadata
-            //
-            return null;
+            throw new RuntimeException("Failed to get broker metadata...");
         }
 
-        // Get the latest offsets and generate the EtlRequests. The requests
-        // will have the
-        // earliest and latest offsets reported by the leader of each partition
-        // set
-        List<EtlRequest> finalRequests = fetchLatestOffsetAndCreateEtlRequests(
-                context, topicAndPartitionByLeaderMap);
-
-        Collections.sort(finalRequests);
         Map<EtlRequest, EtlKey> largestOffsetKeys = getLargestPreviousOffsets(context);
 
         Set<String> moveToLatestTopics = getMoveToLatestTopicsSet(context);
+
+        // Get the latest offsets and generate the EtlRequests. The requests
+        // will have the earliest and latest offsets reported by the leader of
+        // each partition
+        List<EtlRequest> finalRequests = fetchLatestOffsetAndCreateEtlRequests(
+                context, topicAndPartitionByLeaderMap);
+        Collections.sort(finalRequests);
 
         for (EtlRequest request : finalRequests) {
             if (moveToLatestTopics.contains("all")
@@ -262,15 +261,15 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper<?>> {
 
         writeRequests(finalRequests, context);
         writePreviousEtlKeys(largestOffsetKeys.values(), context);
-
         CamusJob.stopTiming("getSplits");
-        CamusJob.startTiming("hadoop");
-        CamusJob.setTime("hadoop_start");
         return allocateWork(finalRequests, context);
     }
 
     private List<InputSplit> allocateWork(List<EtlRequest> requests,
             JobContext context) throws IOException {
+        CamusJob.startTiming("hadoop");
+        CamusJob.setTime("hadoop_start");
+
         int numTasks = context.getConfiguration()
                 .getInt("mapred.map.tasks", 30);
 
@@ -278,33 +277,56 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper<?>> {
         Collections.sort(requests, new Comparator<EtlRequest>() {
             @Override
             public int compare(EtlRequest o1, EtlRequest o2) {
-                if (o2.estimateDataSize() == o1.estimateDataSize()) {
-                    return 0;
-                } else if (o2.estimateDataSize() < o1.estimateDataSize()) {
-                    return -1;
-                } else {
-                    return 1;
-                }
+                return Longs.compare(o2.estimateDataSize(),
+                        o1.estimateDataSize());
             }
         });
 
-        List<InputSplit> kafkaETLSplits = new ArrayList<InputSplit>();
-
+        final List<InputSplit> kafkaETLSplits = new ArrayList<InputSplit>();
+        final int reqCount = requests.size();
+        int reqInx = 0;
         for (int i = 0; i < numTasks; i++) {
             EtlSplit split = new EtlSplit();
 
-            if (requests.size() > 0) {
-                EtlRequest request = requests.remove(0);
+            if (reqInx < reqCount) {
+                EtlRequest request = requests.get(reqInx++);
                 split.addRequest(request);
                 kafkaETLSplits.add(split);
             }
         }
 
-        for (EtlRequest r : requests) {
-            getSmallestMultiSplit(kafkaETLSplits).addRequest(r);
+        while (reqInx < reqCount) {
+            sortSplitsByLength(kafkaETLSplits);
+
+            for (InputSplit split : kafkaETLSplits) {
+                if (reqInx < reqCount) {
+                    EtlRequest request = requests.get(reqInx++);
+                    ((EtlSplit) split).addRequest(request);
+                } else {
+                    break;
+                }
+            }
         }
 
         return kafkaETLSplits;
+    }
+
+    private void sortSplitsByLength(final List<InputSplit> kafkaETLSplits) {
+        Collections.sort(kafkaETLSplits, new Comparator<InputSplit>() {
+            @Override
+            public int compare(InputSplit o1, InputSplit o2) {
+                try {
+                    if (o1.getLength() != o2.getLength()) {
+                        return Longs.compare(o1.getLength(), o2.getLength());
+                    } else {
+                        return ((EtlSplit) o1).getNumRequests()
+                                - ((EtlSplit) o2).getNumRequests();
+                    }
+                } catch (IOException | InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+        });
     }
 
     private SimpleConsumer createConsumer(JobContext context, String broker) {
@@ -461,24 +483,8 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper<?>> {
         return latestOffsetResponse;
     }
 
-    private EtlSplit getSmallestMultiSplit(List<InputSplit> kafkaETLSplits)
-            throws IOException {
-        EtlSplit smallest = (EtlSplit) kafkaETLSplits.get(0);
-
-        for (int i = 1; i < kafkaETLSplits.size(); i++) {
-            EtlSplit challenger = (EtlSplit) kafkaETLSplits.get(i);
-            if (smallest.getLength() > challenger.getLength()
-                    || (smallest.getLength() == challenger.getLength() && smallest
-                            .getNumRequests() > challenger.getNumRequests())) {
-                smallest = challenger;
-            }
-        }
-
-        return smallest;
-    }
-
-    private void writePreviousEtlKeys(Collection<EtlKey> etlKeys, JobContext context)
-            throws IOException {
+    private void writePreviousEtlKeys(Collection<EtlKey> etlKeys,
+            JobContext context) throws IOException {
         if (etlKeys.isEmpty()) {
             return;
         }
