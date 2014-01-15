@@ -105,7 +105,7 @@ public class CamusJob extends Configured implements Tool {
         if (current == null) {
             current = 0L;
         }
-        timingMap.put(name, current - System.nanoTime());
+        timingMap.put(name, current - System.currentTimeMillis());
     }
 
     public static void stopTiming(String name) {
@@ -113,7 +113,7 @@ public class CamusJob extends Configured implements Tool {
         if (current == null) {
             current = 0L;
         }
-        timingMap.put(name, current + System.nanoTime());
+        timingMap.put(name, current + System.currentTimeMillis());
     }
 
     public static void setTime(String name) {
