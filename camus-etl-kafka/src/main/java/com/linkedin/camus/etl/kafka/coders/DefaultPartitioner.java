@@ -12,7 +12,13 @@ import com.linkedin.camus.etl.kafka.mapred.EtlMultiOutputFormat;
 
 public class DefaultPartitioner implements Partitioner {
     protected static final String OUTPUT_DATE_FORMAT = "YYYY/MM/dd/HH";
-    protected DateTimeFormatter outputDateFormatter = null;
+    protected final DateTimeFormatter outputDateFormatter;
+
+    public DefaultPartitioner(JobContext context) {
+        outputDateFormatter = DateUtils.getDateTimeFormatter(
+                OUTPUT_DATE_FORMAT, DateTimeZone.forID(EtlMultiOutputFormat
+                        .getDefaultTimeZone(context)));
+    }
 
     @Override
     public String encodePartition(JobContext context, IEtlKey key) {
@@ -24,14 +30,6 @@ public class DefaultPartitioner implements Partitioner {
     @Override
     public String generatePartitionedPath(JobContext context, String topic,
             int brokerId, int partitionId, String encodedPartition) {
-        // We only need to initialize outputDateFormatter with the default
-        // timeZone once.
-        if (outputDateFormatter == null) {
-            outputDateFormatter = DateUtils.getDateTimeFormatter(
-                    OUTPUT_DATE_FORMAT, DateTimeZone.forID(EtlMultiOutputFormat
-                            .getDefaultTimeZone(context)));
-        }
-
         StringBuilder sb = new StringBuilder();
         sb.append(topic).append("/");
         sb.append(EtlMultiOutputFormat.getDestPathTopicSubDir(context)).append(

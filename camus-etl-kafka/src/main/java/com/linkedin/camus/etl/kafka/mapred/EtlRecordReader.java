@@ -1,6 +1,7 @@
 package com.linkedin.camus.etl.kafka.mapred;
 
 import java.io.IOException;
+import java.net.URI;
 import java.nio.ByteBuffer;
 import java.util.HashSet;
 import java.util.Set;
@@ -18,11 +19,11 @@ import org.joda.time.DateTime;
 
 import com.linkedin.camus.coders.CamusWrapper;
 import com.linkedin.camus.coders.MessageDecoder;
-import com.linkedin.camus.etl.kafka.CamusJob;
 import com.linkedin.camus.etl.kafka.coders.MessageDecoderFactory;
 import com.linkedin.camus.etl.kafka.common.EtlKey;
 import com.linkedin.camus.etl.kafka.common.EtlRequest;
 import com.linkedin.camus.etl.kafka.common.ExceptionWritable;
+import com.linkedin.camus.etl.kafka.common.KafkaBrokerClient;
 import com.linkedin.camus.etl.kafka.common.KafkaReader;
 
 public class EtlRecordReader<T> extends RecordReader<EtlKey, CamusWrapper<T>> {
@@ -160,9 +161,8 @@ public class EtlRecordReader<T> extends RecordReader<EtlKey, CamusWrapper<T>> {
                     }
                 }
 
-                Message message;
-
-                while ((message = reader.getNext()) != null) {
+                while (reader.hasNext()) {
+                    Message message = reader.next();
                     updateCountersAndProgress(message.size());
 
                     if (!decodeMessage(message)) {
@@ -322,9 +322,9 @@ public class EtlRecordReader<T> extends RecordReader<EtlKey, CamusWrapper<T>> {
 
         closeReader();
 
-        reader = new KafkaReader(context, request,
-                CamusJob.getKafkaTimeoutValue(context),
-                CamusJob.getKafkaBufferSize(context));
+        URI uri = request.getURI();
+        KafkaBrokerClient brokerClient = KafkaBrokerClient.create(uri, context);
+        reader = new KafkaReader(brokerClient, request);
 
         @SuppressWarnings("unchecked")
         MessageDecoder<T> d = (MessageDecoder<T>) MessageDecoderFactory

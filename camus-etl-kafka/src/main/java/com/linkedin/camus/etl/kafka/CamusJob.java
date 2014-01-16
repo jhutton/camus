@@ -1,17 +1,13 @@
 package com.linkedin.camus.etl.kafka;
 
-import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.net.URISyntaxException;
 import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.Properties;
 import java.util.TreeMap;
 
@@ -25,7 +21,6 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.filecache.DistributedCache;
 import org.apache.hadoop.fs.ContentSummary;
-import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -48,18 +43,13 @@ import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.log4j.Logger;
 import org.apache.log4j.xml.DOMConfigurator;
-import org.codehaus.jackson.map.DeserializationConfig;
-import org.codehaus.jackson.map.ObjectMapper;
-import org.codehaus.jackson.type.TypeReference;
 import org.joda.time.DateTime;
 import org.joda.time.DateTimeZone;
 import org.joda.time.format.DateTimeFormatter;
 
 import com.linkedin.camus.etl.kafka.common.DateUtils;
-import com.linkedin.camus.etl.kafka.common.EtlCounts;
 import com.linkedin.camus.etl.kafka.common.EtlKey;
 import com.linkedin.camus.etl.kafka.common.ExceptionWritable;
-import com.linkedin.camus.etl.kafka.common.Source;
 import com.linkedin.camus.etl.kafka.mapred.EtlInputFormat;
 import com.linkedin.camus.etl.kafka.mapred.EtlMultiOutputFormat;
 
@@ -198,7 +188,7 @@ public class CamusJob extends Configured implements Tool {
         FileSystem fs = FileSystem.get(job.getConfiguration());
 
         log.info("Dir Destination set to: "
-                + EtlMultiOutputFormat.getDestinationPath(job));
+                + EtlMultiOutputFormat.getOutputDestinationPath(job));
 
         Path execBasePath = new Path(props.getProperty(ETL_EXECUTION_BASE_PATH));
         Path execHistory = new Path(
@@ -283,9 +273,6 @@ public class CamusJob extends Configured implements Tool {
         stopTiming("hadoop");
         startTiming("commit");
 
-        // Send Tracking counts to Kafka
-        sendTrackingCounts(job, fs, newExecutionOutput);
-
         // Print any potentail errors encountered
         printErrors(fs, newExecutionOutput);
 
@@ -329,95 +316,6 @@ public class CamusJob extends Configured implements Tool {
                 System.err.println(value.toString());
             }
             reader.close();
-        }
-    }
-
-    // Posts the tracking counts to Kafka
-    public void sendTrackingCounts(JobContext job, FileSystem fs,
-            Path newExecutionOutput) throws IOException, URISyntaxException {
-        if (EtlMultiOutputFormat.isRunTrackingPost(job)) {
-            FileStatus[] gstatuses = fs.listStatus(newExecutionOutput,
-                    new PrefixFilter("counts"));
-            HashMap<String, EtlCounts> allCounts = new HashMap<String, EtlCounts>();
-            for (FileStatus gfileStatus : gstatuses) {
-                FSDataInputStream fdsis = fs.open(gfileStatus.getPath());
-
-                BufferedReader br = new BufferedReader(new InputStreamReader(
-                        fdsis), 1048576);
-                StringBuffer buffer = new StringBuffer();
-                String temp = "";
-                while ((temp = br.readLine()) != null) {
-                    buffer.append(temp);
-                }
-                ObjectMapper mapper = new ObjectMapper();
-                mapper.configure(
-                        DeserializationConfig.Feature.FAIL_ON_UNKNOWN_PROPERTIES,
-                        false);
-                ArrayList<EtlCounts> countsObjects = mapper.readValue(
-                        buffer.toString(),
-                        new TypeReference<ArrayList<EtlCounts>>() {
-                        });
-
-                for (EtlCounts count : countsObjects) {
-                    String topic = count.getTopic();
-                    if (allCounts.containsKey(topic)) {
-                        EtlCounts existingCounts = allCounts.get(topic);
-                        existingCounts
-                                .setEndTime(Math.max(
-                                        existingCounts.getEndTime(),
-                                        count.getEndTime()));
-                        existingCounts.setLastTimestamp(Math.max(
-                                existingCounts.getLastTimestamp(),
-                                count.getLastTimestamp()));
-                        existingCounts.setStartTime(Math.min(
-                                existingCounts.getStartTime(),
-                                count.getStartTime()));
-                        existingCounts.setFirstTimestamp(Math.min(
-                                existingCounts.getFirstTimestamp(),
-                                count.getFirstTimestamp()));
-                        existingCounts.setErrorCount(existingCounts
-                                .getErrorCount() + count.getErrorCount());
-                        existingCounts.setGranularity(count.getGranularity());
-                        existingCounts.setTopic(count.getTopic());
-                        for (Entry<String, Source> entry : count.getCounts()
-                                .entrySet()) {
-                            Source source = entry.getValue();
-                            if (existingCounts.getCounts().containsKey(
-                                    source.toString())) {
-                                Source old = existingCounts.getCounts().get(
-                                        source.toString());
-                                old.setCount(old.getCount() + source.getCount());
-                                existingCounts.getCounts().put(old.toString(),
-                                        old);
-                            } else {
-                                existingCounts.getCounts().put(
-                                        source.toString(), source);
-                            }
-                            allCounts.put(topic, existingCounts);
-                        }
-                    } else {
-                        allCounts.put(topic, count);
-                    }
-                }
-            }
-
-            for (FileStatus countFile : fs.listStatus(newExecutionOutput,
-                    new PrefixFilter("counts"))) {
-                if (props.getProperty(ETL_KEEP_COUNT_FILES, "false").equals(
-                        "true")) {
-                    fs.rename(countFile.getPath(),
-                            new Path(props.getProperty(ETL_COUNTS_PATH),
-                                    countFile.getPath().getName()));
-                } else {
-                    fs.delete(countFile.getPath(), true);
-                }
-            }
-
-            String brokerList = getKafkaBrokers(job);
-            for (EtlCounts finalCounts : allCounts.values()) {
-                finalCounts.postTrackingCountToKafka(job.getConfiguration(),
-                        props.getProperty(KAFKA_MONITOR_TIER), brokerList);
-            }
         }
     }
 

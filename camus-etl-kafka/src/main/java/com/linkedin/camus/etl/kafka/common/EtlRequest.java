@@ -5,20 +5,11 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.util.HashMap;
-import java.util.Map;
-
-import kafka.api.PartitionOffsetRequestInfo;
-import kafka.common.TopicAndPartition;
-import kafka.javaapi.OffsetRequest;
-import kafka.javaapi.OffsetResponse;
-import kafka.javaapi.consumer.SimpleConsumer;
 
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
-import org.apache.hadoop.mapreduce.JobContext;
 
-import com.linkedin.camus.etl.kafka.CamusJob;
+import com.google.common.base.Objects;
 
 /**
  * A class that represents the kafka pull request.
@@ -36,7 +27,6 @@ public class EtlRequest implements Writable, Comparable<EtlRequest> {
     private String leaderId = "";
     private int partition = 0;
 
-    private JobContext context;
     private URI uri;
     private long offset = DEFAULT_OFFSET;
     private long latestOffset = DEFAULT_OFFSET;
@@ -68,9 +58,8 @@ public class EtlRequest implements Writable, Comparable<EtlRequest> {
      * @param brokerUri
      *            The uri for the broker.
      */
-    public EtlRequest(JobContext context, String topic, String leaderId,
-            int partition, URI brokerUri) {
-        this.context = context;
+    public EtlRequest(String topic, String leaderId, int partition,
+            URI brokerUri) {
         this.topic = topic;
         this.leaderId = leaderId;
         this.uri = brokerUri;
@@ -154,33 +143,6 @@ public class EtlRequest implements Writable, Comparable<EtlRequest> {
     }
 
     public long getEarliestOffset() {
-        if (earliestOffset == -1) {
-            SimpleConsumer consumer = createSimpleConsumer();
-
-            try {
-                Map<TopicAndPartition, PartitionOffsetRequestInfo> offsetInfo = new HashMap<>();
-                offsetInfo.put(
-                        new TopicAndPartition(topic, partition),
-                        new PartitionOffsetRequestInfo(kafka.api.OffsetRequest
-                                .EarliestTime(), 1));
-
-                OffsetResponse response = consumer
-                        .getOffsetsBefore(new OffsetRequest(offsetInfo,
-                                kafka.api.OffsetRequest.CurrentVersion(),
-                                CamusJob.getKafkaClientName(context)));
-
-                long[] offsets = response.offsets(topic, partition);
-
-                if (offsets.length > 0) {
-                    earliestOffset = offsets[0];
-                } else {
-                    earliestOffset = 0;
-                }
-            } finally {
-                consumer.close();
-            }
-        }
-
         return earliestOffset;
     }
 
@@ -189,38 +151,7 @@ public class EtlRequest implements Writable, Comparable<EtlRequest> {
     }
 
     public long getLatestOffset() {
-        if (latestOffset == -1) {
-            this.latestOffset = getLatestOffset(kafka.api.OffsetRequest
-                    .LatestTime());
-        }
-
         return latestOffset;
-    }
-
-    public long getLatestOffset(long timestamp) {
-        SimpleConsumer consumer = createSimpleConsumer();
-
-        try {
-            Map<TopicAndPartition, PartitionOffsetRequestInfo> offsetInfo = new HashMap<>();
-            offsetInfo.put(new TopicAndPartition(topic, partition),
-                    new PartitionOffsetRequestInfo(timestamp, 1));
-
-            OffsetResponse response = consumer
-                    .getOffsetsBefore(new OffsetRequest(offsetInfo,
-                            kafka.api.OffsetRequest.CurrentVersion(), CamusJob
-                                    .getKafkaClientName(context)));
-
-            long[] offsets = response.offsets(topic, partition);
-
-            if (offsets.length > 0) {
-                return offsets[0];
-            } else {
-                // if no information is found, set the offset at the beginning
-                return 0;
-            }
-        } finally {
-            consumer.close();
-        }
     }
 
     public void setLatestOffset(long latestOffset) {
@@ -234,19 +165,6 @@ public class EtlRequest implements Writable, Comparable<EtlRequest> {
      */
     public long estimateDataSize() {
         long latestOffset = getLatestOffset();
-        return latestOffset - offset;
-    }
-
-    /**
-     * Get the difference between the request offset and the latest offset based
-     * on the specified end time.
-     *
-     * @param endTime
-     *            the end time in milliseconds
-     * @return the difference in offsets or message count
-     */
-    public long estimateDataSize(long endTime) {
-        long latestOffset = getLatestOffset(endTime);
         return latestOffset - offset;
     }
 
@@ -286,8 +204,7 @@ public class EtlRequest implements Writable, Comparable<EtlRequest> {
      */
     @Override
     public EtlRequest clone() {
-        EtlRequest request = new EtlRequest(context, topic, leaderId,
-                partition, uri);
+        EtlRequest request = new EtlRequest(topic, leaderId, partition, uri);
         request.setEarliestOffset(earliestOffset);
         request.setLatestOffset(latestOffset);
         request.setOffset(offset);
@@ -296,19 +213,16 @@ public class EtlRequest implements Writable, Comparable<EtlRequest> {
 
     @Override
     public String toString() {
-        return topic + "\turi:" + (uri != null ? uri.toString() : "")
-                + "\tleader:" + leaderId + "\tpartition:" + partition
-                + "\tearliest_offset:" + earliestOffset + "\toffset:" + offset
-                + "\tlatest_offset:" + latestOffset;
+        return Objects.toStringHelper(this).add("topic", topic)
+                .add("leader", leaderId).add("partition", partition)
+                .add("earliestOffset", earliestOffset)
+                .add("latestOffset", latestOffset).add("offset", offset)
+                .add("uri", uri).toString();
     }
 
     @Override
     public int hashCode() {
-        final int prime = 31;
-        int result = 1;
-        result = prime * result + partition;
-        result = prime * result + ((topic == null) ? 0 : topic.hashCode());
-        return result;
+        return Objects.hashCode(topic, partition);
     }
 
     @Override
@@ -320,25 +234,8 @@ public class EtlRequest implements Writable, Comparable<EtlRequest> {
         if (getClass() != obj.getClass())
             return false;
         EtlRequest other = (EtlRequest) obj;
-        if (partition != other.partition)
-            return false;
-        if (topic == null) {
-            if (other.topic != null)
-                return false;
-        } else if (!topic.equals(other.topic))
-            return false;
-        return true;
+        return Objects.equal(topic, other.topic)
+                && Objects.equal(partition, other.partition);
     }
 
-    private SimpleConsumer createSimpleConsumer() {
-        if (uri == null) {
-            throw new NullPointerException("uri not set");
-        }
-
-        SimpleConsumer consumer = new SimpleConsumer(uri.getHost(),
-                uri.getPort(), CamusJob.getKafkaTimeoutValue(context),
-                CamusJob.getKafkaBufferSize(context),
-                CamusJob.getKafkaClientName(context));
-        return consumer;
-    }
 }

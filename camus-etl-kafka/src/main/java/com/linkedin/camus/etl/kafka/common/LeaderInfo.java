@@ -4,15 +4,15 @@ import java.net.URI;
 
 /**
  * Model class to store the leaderInformation
- * 
+ *
  * @author ggupta
- * 
+ *
  */
 
 public class LeaderInfo {
 
-    private URI uri;
-    private int leaderId;
+    private final URI uri;
+    private final int leaderId;
 
     public LeaderInfo(URI uri, int leaderId) {
         this.uri = uri;

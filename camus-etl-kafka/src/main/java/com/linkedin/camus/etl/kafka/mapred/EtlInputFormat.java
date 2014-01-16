@@ -1,5 +1,7 @@
 package com.linkedin.camus.etl.kafka.mapred;
 
+import static com.google.common.base.Preconditions.checkState;
+
 import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
@@ -14,15 +16,11 @@ import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
 
-import kafka.api.PartitionOffsetRequestInfo;
 import kafka.common.ErrorMapping;
 import kafka.common.TopicAndPartition;
-import kafka.javaapi.OffsetRequest;
 import kafka.javaapi.OffsetResponse;
 import kafka.javaapi.PartitionMetadata;
 import kafka.javaapi.TopicMetadata;
-import kafka.javaapi.TopicMetadataRequest;
-import kafka.javaapi.consumer.SimpleConsumer;
 
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
@@ -47,6 +45,7 @@ import com.linkedin.camus.etl.kafka.coders.KafkaAvroMessageDecoder;
 import com.linkedin.camus.etl.kafka.coders.MessageDecoderFactory;
 import com.linkedin.camus.etl.kafka.common.EtlKey;
 import com.linkedin.camus.etl.kafka.common.EtlRequest;
+import com.linkedin.camus.etl.kafka.common.KafkaBrokerClient;
 import com.linkedin.camus.etl.kafka.common.LeaderInfo;
 
 /**
@@ -88,42 +87,37 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper<?>> {
      * @return a list of metadata
      */
     public List<TopicMetadata> getKafkaMetadata(JobContext context) {
-        List<String> metaRequestTopics = new ArrayList<String>();
         CamusJob.startTiming("kafkaSetupTime");
         String brokerString = CamusJob.getKafkaBrokers(context);
         List<String> brokers = Arrays.asList(brokerString.split("\\s*,\\s*"));
+
+        checkState(!brokers.isEmpty(), "No brokers to fetch from!");
+
         Collections.shuffle(brokers);
-        boolean fetchMetaDataSucceeded = false;
-        int i = 0;
         List<TopicMetadata> topicMetadataList = null;
-        Exception savedException = null;
-        while (i < brokers.size() && !fetchMetaDataSucceeded) {
-            SimpleConsumer consumer = createConsumer(context, brokers.get(i));
-            log.info(String
-                    .format("Fetching metadata from broker %s with client id %s for %d topic(s) %s",
-                            brokers.get(i), consumer.clientId(),
-                            metaRequestTopics.size(), metaRequestTopics));
-            try {
-                topicMetadataList = consumer.send(
-                        new TopicMetadataRequest(metaRequestTopics))
-                        .topicsMetadata();
-                fetchMetaDataSucceeded = true;
+
+        for (String broker : brokers) {
+            try (KafkaBrokerClient client = KafkaBrokerClient.create(broker,
+                    context)) {
+                topicMetadataList = client.fetchTopicMetadata();
+                break;
             } catch (Exception e) {
-                savedException = e;
-                log.warn(
-                        String.format(
-                                "Fetching topic metadata with client id %s for topics [%s] from broker [%s] failed",
-                                consumer.clientId(), metaRequestTopics,
-                                brokers.get(i)), e);
-            } finally {
-                consumer.close();
-                i++;
+                if (topicMetadataList == null) {
+                    // fetch failed, log the exception and try the next one in the list
+                    // if there are any more
+                    log.error("Failed fetching metadata from broker: " + broker, e);
+                } else {
+                    // fetch succeeded, but closing the client caused an exception
+                    log.warn("Failed closing client broker: " + broker);
+                    break;
+                }
             }
         }
-        if (!fetchMetaDataSucceeded) {
-            throw new RuntimeException("Failed to obtain metadata!",
-                    savedException);
+
+        if (topicMetadataList == null) {
+            throw new RuntimeException("Failed to fetch kafka topic metadata! (See previous exceptions");
         }
+
         CamusJob.stopTiming("kafkaSetupTime");
         return topicMetadataList;
     }
@@ -140,33 +134,24 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper<?>> {
             Map<LeaderInfo, List<TopicAndPartition>> topicAndPartionByLeaderMap) {
         final List<EtlRequest> finalRequests = new ArrayList<EtlRequest>();
         for (LeaderInfo leader : topicAndPartionByLeaderMap.keySet()) {
-            SimpleConsumer consumer = createSimpleConsumer(context, leader);
-            List<TopicAndPartition> topicAndPartitions = topicAndPartionByLeaderMap
-                    .get(leader);
 
-            // Latest Offset request info
-            PartitionOffsetRequestInfo partitionLatestOffsetRequestInfo = new PartitionOffsetRequestInfo(
-                    kafka.api.OffsetRequest.LatestTime(), 1);
+            try (KafkaBrokerClient brokerClient = createBrokerClient(context,
+                    leader)) {
+                List<TopicAndPartition> topicAndPartitions = topicAndPartionByLeaderMap
+                        .get(leader);
+                OffsetResponse earliestOffsetResponse = brokerClient
+                        .fetchEarliestOffsets(topicAndPartitions);
+                OffsetResponse latestOffsetResponse = brokerClient
+                        .fetchLatestOffsets(topicAndPartitions);
 
-            OffsetResponse latestOffsetResponse = getOffsetResponse(context,
-                    consumer, topicAndPartitions,
-                    partitionLatestOffsetRequestInfo);
-
-            // Earliest Offset request info
-            PartitionOffsetRequestInfo partitionEarliestOffsetRequestInfo = new PartitionOffsetRequestInfo(
-                    kafka.api.OffsetRequest.EarliestTime(), 1);
-
-            OffsetResponse earliestOffsetResponse = getOffsetResponse(context,
-                    consumer, topicAndPartitions,
-                    partitionEarliestOffsetRequestInfo);
-
-            consumer.close();
-
-            for (TopicAndPartition topicAndPartition : topicAndPartitions) {
-                EtlRequest etlRequest = createEtlRequest(context, leader,
-                        latestOffsetResponse, earliestOffsetResponse,
-                        topicAndPartition);
-                finalRequests.add(etlRequest);
+                for (TopicAndPartition topicAndPartition : topicAndPartitions) {
+                    EtlRequest etlRequest = createEtlRequest(context, leader,
+                            latestOffsetResponse, earliestOffsetResponse,
+                            topicAndPartition);
+                    finalRequests.add(etlRequest);
+                }
+            } catch (Exception e) {
+                log.error("Failed closing broker client", e);
             }
         }
         return finalRequests;
@@ -329,17 +314,6 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper<?>> {
         });
     }
 
-    private SimpleConsumer createConsumer(JobContext context, String broker) {
-        String[] hostPort = broker.split(":");
-        String host = hostPort[0];
-        int port = hostPort.length > 1 ? Integer.parseInt(hostPort[1]) : 9092;
-        SimpleConsumer consumer = new SimpleConsumer(host, port,
-                CamusJob.getKafkaTimeoutValue(context),
-                CamusJob.getKafkaBufferSize(context),
-                CamusJob.getKafkaClientName(context));
-        return consumer;
-    }
-
     private EtlRequest createEtlRequest(JobContext context, LeaderInfo leader,
             OffsetResponse latestOffsetResponse,
             OffsetResponse earliestOffsetResponse,
@@ -351,24 +325,18 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper<?>> {
 
         // create a new etl request. The 'offset' field will be set to the
         // default, -1
-        EtlRequest etlRequest = new EtlRequest(context,
-                topicAndPartition.topic(), Integer.toString(leader
-                        .getLeaderId()), topicAndPartition.partition(),
-                leader.getUri());
+        EtlRequest etlRequest = new EtlRequest(topicAndPartition.topic(),
+                Integer.toString(leader.getLeaderId()),
+                topicAndPartition.partition(), leader.getUri());
 
         etlRequest.setLatestOffset(latestOffset);
         etlRequest.setEarliestOffset(earliestOffset);
         return etlRequest;
     }
 
-    private SimpleConsumer createSimpleConsumer(JobContext context,
+    private KafkaBrokerClient createBrokerClient(JobContext context,
             LeaderInfo leader) {
-        SimpleConsumer consumer = new SimpleConsumer(leader.getUri().getHost(),
-                leader.getUri().getPort(),
-                CamusJob.getKafkaTimeoutValue(context),
-                CamusJob.getKafkaBufferSize(context),
-                CamusJob.getKafkaClientName(context));
-        return consumer;
+        return KafkaBrokerClient.create(leader.getUri(), context);
     }
 
     private Set<String> getMoveToLatestTopicsSet(JobContext context) {
@@ -466,23 +434,6 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper<?>> {
         }
     }
 
-    private OffsetResponse getOffsetResponse(JobContext context,
-            SimpleConsumer consumer,
-            List<TopicAndPartition> topicAndPartitions,
-            PartitionOffsetRequestInfo partitionRequestInfo) {
-        Map<TopicAndPartition, PartitionOffsetRequestInfo> topicOffsetInfo = new HashMap<TopicAndPartition, PartitionOffsetRequestInfo>();
-        for (TopicAndPartition topicAndPartition : topicAndPartitions) {
-            topicOffsetInfo.put(topicAndPartition, partitionRequestInfo);
-        }
-
-        OffsetResponse latestOffsetResponse = consumer
-                .getOffsetsBefore(new OffsetRequest(topicOffsetInfo,
-                        kafka.api.OffsetRequest.CurrentVersion(), CamusJob
-                                .getKafkaClientName(context)));
-
-        return latestOffsetResponse;
-    }
-
     private void writePreviousEtlKeys(Collection<EtlKey> etlKeys,
             JobContext context) throws IOException {
         if (etlKeys.isEmpty()) {
@@ -558,9 +509,8 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper<?>> {
                 try {
                     final EtlKey key = new EtlKey();
                     while (reader.next(key, NullWritable.get())) {
-                        EtlRequest request = new EtlRequest(context,
-                                key.getTopic(), key.getLeaderId(),
-                                key.getPartition(), null);
+                        EtlRequest request = new EtlRequest(key.getTopic(),
+                                key.getLeaderId(), key.getPartition(), null);
 
                         EtlKey oldKey = offsetKeysMap.get(request);
                         if (oldKey != null) {
