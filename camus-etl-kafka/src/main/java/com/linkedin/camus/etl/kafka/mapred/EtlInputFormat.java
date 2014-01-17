@@ -46,12 +46,40 @@ import com.linkedin.camus.etl.kafka.coders.MessageDecoderFactory;
 import com.linkedin.camus.etl.kafka.common.EtlKey;
 import com.linkedin.camus.etl.kafka.common.EtlRequest;
 import com.linkedin.camus.etl.kafka.common.KafkaBrokerClient;
-import com.linkedin.camus.etl.kafka.common.LeaderInfo;
+import com.linkedin.camus.etl.kafka.mapred.io.EtlRecordReader;
 
 /**
  * Input format for a Kafka pull job.
  */
 public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper<?>> {
+
+    private static class LeaderInfo {
+        private final URI uri;
+        private final int leaderId;
+
+        public LeaderInfo(URI uri, int leaderId) {
+            this.uri = uri;
+            this.leaderId = leaderId;
+        }
+
+        public int getLeaderId() {
+            return leaderId;
+        }
+
+        public URI getUri() {
+            return uri;
+        }
+
+        @Override
+        public int hashCode() {
+            return this.uri.hashCode();
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            return this.hashCode() == obj.hashCode();
+        }
+    }
 
     public static final String KAFKA_BLACKLIST_TOPIC = "kafka.blacklist.topics";
     public static final String KAFKA_WHITELIST_TOPIC = "kafka.whitelist.topics";

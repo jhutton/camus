@@ -1,4 +1,4 @@
-package com.linkedin.camus.etl.kafka.common;
+package com.linkedin.camus.etl.kafka.mapred.io;
 
 import java.io.IOException;
 import java.util.Iterator;
@@ -11,6 +11,8 @@ import kafka.message.MessageAndOffset;
 import org.apache.log4j.Logger;
 
 import com.google.common.collect.AbstractIterator;
+import com.linkedin.camus.etl.kafka.common.EtlRequest;
+import com.linkedin.camus.etl.kafka.common.KafkaBrokerClient;
 
 /**
  * Poorly named class that handles kafka pull events within each

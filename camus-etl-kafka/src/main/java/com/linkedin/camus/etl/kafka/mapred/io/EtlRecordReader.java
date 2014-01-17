@@ -1,4 +1,4 @@
-package com.linkedin.camus.etl.kafka.mapred;
+package com.linkedin.camus.etl.kafka.mapred.io;
 
 import java.io.IOException;
 import java.net.URI;
@@ -24,7 +24,8 @@ import com.linkedin.camus.etl.kafka.common.EtlKey;
 import com.linkedin.camus.etl.kafka.common.EtlRequest;
 import com.linkedin.camus.etl.kafka.common.ExceptionWritable;
 import com.linkedin.camus.etl.kafka.common.KafkaBrokerClient;
-import com.linkedin.camus.etl.kafka.common.KafkaReader;
+import com.linkedin.camus.etl.kafka.mapred.EtlInputFormat;
+import com.linkedin.camus.etl.kafka.mapred.EtlSplit;
 
 public class EtlRecordReader<T> extends RecordReader<EtlKey, CamusWrapper<T>> {
     private static Logger log = Logger.getLogger(EtlRecordReader.class);

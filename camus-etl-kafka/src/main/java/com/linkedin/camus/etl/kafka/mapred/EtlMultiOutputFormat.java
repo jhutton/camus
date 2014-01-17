@@ -38,10 +38,10 @@ import com.linkedin.camus.coders.Partitioner;
 import com.linkedin.camus.etl.IEtlKey;
 import com.linkedin.camus.etl.RecordWriterProvider;
 import com.linkedin.camus.etl.kafka.coders.DefaultPartitioner;
-import com.linkedin.camus.etl.kafka.common.AvroRecordWriterProvider;
 import com.linkedin.camus.etl.kafka.common.DateUtils;
 import com.linkedin.camus.etl.kafka.common.EtlKey;
 import com.linkedin.camus.etl.kafka.common.ExceptionWritable;
+import com.linkedin.camus.etl.kafka.mapred.io.AvroRecordWriterProvider;
 
 /**
  * MultipleAvroOutputFormat.
