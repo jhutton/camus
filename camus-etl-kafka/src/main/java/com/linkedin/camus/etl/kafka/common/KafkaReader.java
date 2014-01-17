@@ -136,7 +136,7 @@ public class KafkaReader extends AbstractIterator<Message> {
         }
     }
 
-    public void close() throws IOException {
+    public void close() {
         try {
             brokerClient.close();
         } catch (Exception e) {

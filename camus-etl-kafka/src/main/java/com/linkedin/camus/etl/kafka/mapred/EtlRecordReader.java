@@ -132,7 +132,7 @@ public class EtlRecordReader<T> extends RecordReader<EtlKey, CamusWrapper<T>> {
         return (float) ((double) getPos() / totalBytes);
     }
 
-    private long getPos() throws IOException {
+    private long getPos() {
         if (reader != null) {
             return readBytes + reader.getReadBytes();
         } else {
@@ -247,8 +247,7 @@ public class EtlRecordReader<T> extends RecordReader<EtlKey, CamusWrapper<T>> {
         }
     }
 
-    private void setEndStatus(long timeStamp, String message)
-            throws IOException {
+    private void setEndStatus(long timeStamp, String message) {
         log.info(message);
         DateTime time = new DateTime(timeStamp);
         statusMsgBuilder.append(" max read at ").append(time.toString());
@@ -334,7 +333,7 @@ public class EtlRecordReader<T> extends RecordReader<EtlKey, CamusWrapper<T>> {
         return true;
     }
 
-    private void closeReader() throws IOException {
+    private void closeReader() {
         if (reader != null) {
             try {
                 readBytes += reader.getReadBytes();

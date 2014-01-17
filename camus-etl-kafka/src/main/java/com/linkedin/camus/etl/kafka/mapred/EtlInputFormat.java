@@ -103,11 +103,14 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper<?>> {
                 break;
             } catch (Exception e) {
                 if (topicMetadataList == null) {
-                    // fetch failed, log the exception and try the next one in the list
-                    // if there are any more
-                    log.error("Failed fetching metadata from broker: " + broker, e);
+                    // fetch failed, log the exception and try the next one in
+                    // the list if there are any more
+                    log.error(
+                            "Failed fetching metadata from broker: " + broker,
+                            e);
                 } else {
-                    // fetch succeeded, but closing the client caused an exception
+                    // fetch succeeded, but closing the client caused an
+                    // exception
                     log.warn("Failed closing client broker: " + broker);
                     break;
                 }
@@ -115,7 +118,8 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper<?>> {
         }
 
         if (topicMetadataList == null) {
-            throw new RuntimeException("Failed to fetch kafka topic metadata! (See previous exceptions");
+            throw new RuntimeException(
+                    "Failed to fetch kafka topic metadata! (See previous exceptions");
         }
 
         CamusJob.stopTiming("kafkaSetupTime");
@@ -145,7 +149,7 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper<?>> {
                         .fetchLatestOffsets(topicAndPartitions);
 
                 for (TopicAndPartition topicAndPartition : topicAndPartitions) {
-                    EtlRequest etlRequest = createEtlRequest(context, leader,
+                    EtlRequest etlRequest = createEtlRequest(leader,
                             latestOffsetResponse, earliestOffsetResponse,
                             topicAndPartition);
                     finalRequests.add(etlRequest);
@@ -251,7 +255,7 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper<?>> {
     }
 
     private List<InputSplit> allocateWork(List<EtlRequest> requests,
-            JobContext context) throws IOException {
+            JobContext context) {
         CamusJob.startTiming("hadoop");
         CamusJob.setTime("hadoop_start");
 
@@ -314,7 +318,7 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper<?>> {
         });
     }
 
-    private EtlRequest createEtlRequest(JobContext context, LeaderInfo leader,
+    private EtlRequest createEtlRequest(LeaderInfo leader,
             OffsetResponse latestOffsetResponse,
             OffsetResponse earliestOffsetResponse,
             TopicAndPartition topicAndPartition) {
@@ -450,17 +454,13 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper<?>> {
         Path output = new Path(outputPath, EtlMultiOutputFormat.OFFSET_PREFIX
                 + "-previous");
 
-        SequenceFile.Writer writer = SequenceFile.createWriter(
+        try (SequenceFile.Writer writer = SequenceFile.createWriter(
                 context.getConfiguration(), SequenceFile.Writer.file(output),
                 SequenceFile.Writer.keyClass(EtlKey.class),
-                SequenceFile.Writer.valueClass(NullWritable.class));
-
-        try {
+                SequenceFile.Writer.valueClass(NullWritable.class))) {
             for (EtlKey key : etlKeys) {
                 writer.append(key, NullWritable.get());
             }
-        } finally {
-            writer.close();
         }
     }
 
@@ -478,16 +478,14 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper<?>> {
         }
 
         Path output = new Path(outputPath, EtlMultiOutputFormat.REQUESTS_FILE);
-        SequenceFile.Writer writer = SequenceFile.createWriter(
+
+        try (SequenceFile.Writer writer = SequenceFile.createWriter(
                 context.getConfiguration(), SequenceFile.Writer.file(output),
                 SequenceFile.Writer.keyClass(EtlRequest.class),
-                SequenceFile.Writer.valueClass(NullWritable.class));
-        try {
+                SequenceFile.Writer.valueClass(NullWritable.class))) {
             for (EtlRequest r : requests) {
                 writer.append(r, NullWritable.get());
             }
-        } finally {
-            writer.close();
         }
     }
 
@@ -502,11 +500,10 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper<?>> {
 
             for (FileStatus f : fs.listStatus(input, new OffsetFileFilter())) {
                 log.info("previous offset file:" + f.getPath().toString());
-                SequenceFile.Reader reader = new SequenceFile.Reader(
-                        context.getConfiguration(), SequenceFile.Reader.file(f
-                                .getPath()));
 
-                try {
+                try (SequenceFile.Reader reader = new SequenceFile.Reader(
+                        context.getConfiguration(), SequenceFile.Reader.file(f
+                                .getPath()))) {
                     final EtlKey key = new EtlKey();
                     while (reader.next(key, NullWritable.get())) {
                         EtlRequest request = new EtlRequest(key.getTopic(),
@@ -521,8 +518,6 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper<?>> {
                             offsetKeysMap.put(request, key);
                         }
                     }
-                } finally {
-                    reader.close();
                 }
             }
         }

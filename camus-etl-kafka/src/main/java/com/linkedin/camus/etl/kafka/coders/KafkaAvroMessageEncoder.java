@@ -34,7 +34,7 @@ public class KafkaAvroMessageEncoder extends
             .synchronizedMap(new HashMap<Schema, String>());
     private final EncoderFactory encoderFactory = EncoderFactory.get();
 
-    public KafkaAvroMessageEncoder(String topicName, Configuration conf) {
+    public KafkaAvroMessageEncoder(String topicName, @SuppressWarnings("unused") Configuration conf) {
         this.topicName = topicName;
 
     }

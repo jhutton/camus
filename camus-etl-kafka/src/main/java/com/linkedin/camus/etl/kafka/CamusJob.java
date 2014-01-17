@@ -84,7 +84,7 @@ public class CamusJob extends Configured implements Tool {
         this.props = new Properties();
     }
 
-    public CamusJob(Properties props) throws IOException {
+    public CamusJob(Properties props) {
         this.props = props;
     }
 
@@ -305,17 +305,16 @@ public class CamusJob extends Configured implements Tool {
             throws IOException {
         for (FileStatus f : fs.listStatus(newExecutionOutput, new PrefixFilter(
                 EtlMultiOutputFormat.ERRORS_PREFIX))) {
-            SequenceFile.Reader reader = new SequenceFile.Reader(fs.getConf(),
-                    SequenceFile.Reader.file(f.getPath()));
+            try(SequenceFile.Reader reader = new SequenceFile.Reader(fs.getConf(),
+                    SequenceFile.Reader.file(f.getPath()))) {
+                EtlKey key = new EtlKey();
+                ExceptionWritable value = new ExceptionWritable();
 
-            EtlKey key = new EtlKey();
-            ExceptionWritable value = new ExceptionWritable();
-
-            while (reader.next(key, value)) {
-                System.err.println(key.toString());
-                System.err.println(value.toString());
+                while (reader.next(key, value)) {
+                    System.err.println(key.toString());
+                    System.err.println(value.toString());
+                }
             }
-            reader.close();
         }
     }
 

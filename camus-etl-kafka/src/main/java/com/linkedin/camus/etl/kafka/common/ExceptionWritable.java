@@ -21,17 +21,15 @@ public class ExceptionWritable extends Text {
 
     public void set(String message, Throwable e) {
         StringWriter strWriter = new StringWriter();
-        PrintWriter printer = new PrintWriter(strWriter);
+        try(PrintWriter printer = new PrintWriter(strWriter)) {
+            if (message != null) {
+                printer.write(message);
+                printer.write("\n");
+            }
 
-        if (message != null) {
-            printer.write(message);
-            printer.write("\n");
+            e.printStackTrace(printer);
+            super.set(strWriter.toString());
         }
-
-        e.printStackTrace(printer);
-
-        super.set(strWriter.toString());
-        printer.close();
     }
 
     public void set(Exception e) {

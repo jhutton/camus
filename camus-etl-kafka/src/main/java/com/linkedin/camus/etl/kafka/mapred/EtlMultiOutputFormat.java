@@ -226,8 +226,7 @@ public class EtlMultiOutputFormat extends FileOutputFormat<EtlKey, Object> {
         job.getConfiguration().setBoolean(ETL_RUN_TRACKING_POST, value);
     }
 
-    public String getWorkingFileName(JobContext context, EtlKey key)
-            throws IOException {
+    public String getWorkingFileName(JobContext context, EtlKey key) {
         Partitioner partitioner = getPartitionerForTopic(context,
                 key.getTopic());
         return "data." + key.getTopic().replaceAll("\\.", "_") + "."
@@ -235,8 +234,7 @@ public class EtlMultiOutputFormat extends FileOutputFormat<EtlKey, Object> {
                 + partitioner.encodePartition(context, key);
     }
 
-    public Partitioner getPartitionerForTopic(JobContext job, String topicName)
-            throws IOException {
+    public Partitioner getPartitionerForTopic(JobContext job, String topicName) {
         Partitioner topicPartitioner = topicPartitionerCache.get(topicName);
 
         if (topicPartitioner != null) {
@@ -299,13 +297,13 @@ public class EtlMultiOutputFormat extends FileOutputFormat<EtlKey, Object> {
 
     class MultiEtlRecordWriter extends RecordWriter<EtlKey, Object> {
         private final TaskAttemptContext context;
-        private Writer errorWriter = null;
+        private final Writer errorWriter;
         private String currentTopic = "";
 
         private final Map<String, RecordWriter<IEtlKey, CamusWrapper<?>>> dataWriters = new HashMap<>();
 
         public MultiEtlRecordWriter(TaskAttemptContext context)
-                throws IOException, InterruptedException {
+                throws IOException {
             this.context = context;
             errorWriter = SequenceFile.createWriter(context.getConfiguration(),
                     SequenceFile.Writer.file(new Path(committer.getWorkPath(),
@@ -389,7 +387,7 @@ public class EtlMultiOutputFormat extends FileOutputFormat<EtlKey, Object> {
                             + recordWriterProvider.getFilenameExtension());
         }
 
-        public void incrementCount(EtlKey key) throws IOException {
+        public void incrementCount(EtlKey key) {
             String workingFileName = getWorkingFileName(context, key);
             PartitionCounts value = counts.get(workingFileName);
 
@@ -449,20 +447,19 @@ public class EtlMultiOutputFormat extends FileOutputFormat<EtlKey, Object> {
                         / 1000);
             }
 
-            SequenceFile.Writer offsetWriter = SequenceFile.createWriter(
+            try (SequenceFile.Writer offsetWriter = SequenceFile.createWriter(
                     context.getConfiguration(), SequenceFile.Writer
                             .file(new Path(super.getWorkPath(), getUniqueFile(
                                     context, OFFSET_PREFIX, ""))),
                     SequenceFile.Writer.keyClass(EtlKey.class),
-                    SequenceFile.Writer.valueClass(NullWritable.class));
-
-            for (Entry<String, PartitionCounts> entry : counts.entrySet()) {
-                // write the last key passed to the committer
-                offsetWriter.append(entry.getValue().lastKey,
-                        NullWritable.get());
+                    SequenceFile.Writer.valueClass(NullWritable.class))) {
+                for (Entry<String, PartitionCounts> entry : counts.entrySet()) {
+                    // write the last key passed to the committer
+                    offsetWriter.append(entry.getValue().lastKey,
+                            NullWritable.get());
+                }
             }
 
-            offsetWriter.close();
             super.commitTask(context);
         }
 
