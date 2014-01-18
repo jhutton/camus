@@ -2,14 +2,8 @@ package com.linkedin.camus.etl.kafka.mapred;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
-import java.io.BufferedOutputStream;
 import java.io.IOException;
-import java.io.OutputStream;
 import java.lang.reflect.InvocationTargetException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -19,7 +13,6 @@ import java.util.regex.Pattern;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.SequenceFile;
 import org.apache.hadoop.io.SequenceFile.Writer;
 import org.apache.hadoop.mapreduce.JobContext;
@@ -29,19 +22,22 @@ import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.log4j.Logger;
-import org.codehaus.jackson.map.ObjectMapper;
 import org.joda.time.format.DateTimeFormatter;
 
+import com.google.common.base.Function;
+import com.google.common.collect.Iterables;
 import com.google.common.collect.Maps;
 import com.linkedin.camus.coders.CamusWrapper;
 import com.linkedin.camus.coders.Partitioner;
 import com.linkedin.camus.etl.IEtlKey;
 import com.linkedin.camus.etl.RecordWriterProvider;
+import com.linkedin.camus.etl.kafka.CamusJob;
 import com.linkedin.camus.etl.kafka.coders.DefaultPartitioner;
 import com.linkedin.camus.etl.kafka.common.DateUtils;
 import com.linkedin.camus.etl.kafka.common.EtlKey;
 import com.linkedin.camus.etl.kafka.common.ExceptionWritable;
 import com.linkedin.camus.etl.kafka.mapred.io.AvroRecordWriterProvider;
+import com.linkedin.camus.etl.kafka.persistence.JobRecordKeeper;
 
 /**
  * MultipleAvroOutputFormat.
@@ -53,14 +49,12 @@ public class EtlMultiOutputFormat extends FileOutputFormat<EtlKey, Object> {
     public static final String ETL_DESTINATION_PATH = "etl.destination.path";
     public static final String ETL_DESTINATION_PATH_TOPIC_SUBDIRECTORY = "etl.destination.path.topic.sub.dir";
     public static final String ETL_RUN_MOVE_DATA = "etl.run.move.data";
-    public static final String ETL_RUN_TRACKING_POST = "etl.run.tracking.post";
 
     public static final String ETL_DEFAULT_TIMEZONE = "etl.default.timezone";
     public static final String ETL_DEFLATE_LEVEL = "etl.deflate.level";
     public static final String ETL_AVRO_WRITER_SYNC_INTERVAL = "etl.avro.writer.sync.interval";
     public static final String ETL_OUTPUT_FILE_TIME_PARTITION_MINS = "etl.output.file.time.partition.mins";
 
-    public static final String KAFKA_MONITOR_TIME_GRANULARITY_MS = "kafka.monitor.time.granularity";
     public static final String ETL_DEFAULT_PARTITIONER_CLASS = "etl.partitioner.class";
     public static final String ETL_OUTPUT_CODEC = "etl.output.codec";
     public static final String ETL_DEFAULT_OUTPUT_CODEC = "deflate";
@@ -82,7 +76,8 @@ public class EtlMultiOutputFormat extends FileOutputFormat<EtlKey, Object> {
     private final ConcurrentMap<String, Partitioner> topicPartitionerCache = Maps
             .newConcurrentMap();
 
-    private EtlMultiOutputCommitter committer = null;
+    private EtlMultiOutputCommitter committer;
+    private JobRecordKeeper jobRecordKeeper;
 
     @Override
     public RecordWriter<EtlKey, Object> getRecordWriter(
@@ -97,7 +92,7 @@ public class EtlMultiOutputFormat extends FileOutputFormat<EtlKey, Object> {
         return new MultiEtlRecordWriter(context);
     }
 
-    private RecordWriter<IEtlKey, CamusWrapper<?>> getDataRecordWriter(
+    private RecordWriter<IEtlKey, CamusWrapper<?>> createDataRecordWriter(
             TaskAttemptContext context, String fileName, CamusWrapper<?> value)
             throws IOException, InterruptedException {
         RecordWriterProvider recordWriterProvider;
@@ -113,29 +108,41 @@ public class EtlMultiOutputFormat extends FileOutputFormat<EtlKey, Object> {
                 value, committer);
     }
 
+    /*
+     * (non-Javadoc)
+     *
+     * @see
+     * org.apache.hadoop.mapreduce.lib.output.FileOutputFormat#getOutputCommitter
+     * (org.apache.hadoop.mapreduce.TaskAttemptContext)
+     */
     @Override
     public synchronized OutputCommitter getOutputCommitter(
             TaskAttemptContext context) throws IOException {
+        // this is the *first* method called by the framework after
+        // instantiating this class
         if (committer == null) {
             committer = new EtlMultiOutputCommitter(getOutputPath(context),
                     context);
         }
 
+        // we use this method as a kind of 'init()' method to create the
+        // job record keeper
+        jobRecordKeeper = CamusJob.getRecordKeeper(context);
         return committer;
     }
 
     public static void setRecordWriterProviderClass(JobContext job,
-            Class<RecordWriterProvider> recordWriterProviderClass) {
+            Class<? extends RecordWriterProvider> recordWriterProviderClass) {
         job.getConfiguration().setClass(ETL_RECORD_WRITER_PROVIDER_CLASS,
                 recordWriterProviderClass, RecordWriterProvider.class);
     }
 
     @SuppressWarnings("unchecked")
-    public static Class<RecordWriterProvider> getRecordWriterProviderClass(
+    public static Class<? extends RecordWriterProvider> getRecordWriterProviderClass(
             JobContext job) {
-        return (Class<RecordWriterProvider>) job.getConfiguration().getClass(
-                ETL_RECORD_WRITER_PROVIDER_CLASS,
-                AvroRecordWriterProvider.class);
+        return (Class<? extends RecordWriterProvider>) job.getConfiguration()
+                .getClass(ETL_RECORD_WRITER_PROVIDER_CLASS,
+                        AvroRecordWriterProvider.class);
     }
 
     public static void setDefaultTimeZone(JobContext job, String tz) {
@@ -163,15 +170,6 @@ public class EtlMultiOutputFormat extends FileOutputFormat<EtlKey, Object> {
     public static Path getDestPathTopicSubDir(JobContext job) {
         return new Path(job.getConfiguration().get(
                 ETL_DESTINATION_PATH_TOPIC_SUBDIRECTORY, "hourly"));
-    }
-
-    public static void setMonitorTimeGranularityMins(JobContext job, int mins) {
-        job.getConfiguration().setInt(KAFKA_MONITOR_TIME_GRANULARITY_MS, mins);
-    }
-
-    public static int getMonitorTimeGranularityMins(JobContext job) {
-        return job.getConfiguration().getInt(KAFKA_MONITOR_TIME_GRANULARITY_MS,
-                10);
     }
 
     public static void setEtlAvroWriterSyncInterval(JobContext job, int val) {
@@ -216,14 +214,6 @@ public class EtlMultiOutputFormat extends FileOutputFormat<EtlKey, Object> {
 
     public static void setRunMoveData(JobContext job, boolean value) {
         job.getConfiguration().setBoolean(ETL_RUN_MOVE_DATA, value);
-    }
-
-    public static boolean isRunTrackingPost(JobContext job) {
-        return job.getConfiguration().getBoolean(ETL_RUN_TRACKING_POST, false);
-    }
-
-    public static void setRunTrackingPost(JobContext job, boolean value) {
-        job.getConfiguration().setBoolean(ETL_RUN_TRACKING_POST, value);
     }
 
     public String getWorkingFileName(JobContext context, EtlKey key) {
@@ -300,7 +290,8 @@ public class EtlMultiOutputFormat extends FileOutputFormat<EtlKey, Object> {
         private final Writer errorWriter;
         private String currentTopic = "";
 
-        private final Map<String, RecordWriter<IEtlKey, CamusWrapper<?>>> dataWriters = new HashMap<>();
+        private final ConcurrentMap<String, RecordWriter<IEtlKey, CamusWrapper<?>>> dataWriters = Maps
+                .newConcurrentMap();
 
         public MultiEtlRecordWriter(TaskAttemptContext context)
                 throws IOException {
@@ -332,28 +323,38 @@ public class EtlMultiOutputFormat extends FileOutputFormat<EtlKey, Object> {
                             .values()) {
                         writer.close(context);
                     }
+
                     dataWriters.clear();
                     currentTopic = key.getTopic();
+                    log.warn("clearing data writers since current topic changed to "
+                            + key.getTopic());
                 }
 
                 committer.incrementCount(key);
-
-                String workingFileName = getWorkingFileName(context, key);
-                RecordWriter<IEtlKey, CamusWrapper<?>> recordWriter = dataWriters
-                        .get(workingFileName);
-
-                if (recordWriter == null) {
-                    recordWriter = getDataRecordWriter(context,
-                            workingFileName, value);
-                    dataWriters.put(workingFileName, recordWriter);
-                }
+                RecordWriter<IEtlKey, CamusWrapper<?>> recordWriter = getRecordWriter(
+                        key, value);
                 recordWriter.write(key, value);
-
             } else if (val instanceof ExceptionWritable) {
                 System.err.println(key.toString());
                 System.err.println(val.toString());
                 errorWriter.append(key, (ExceptionWritable) val);
             }
+        }
+
+        private RecordWriter<IEtlKey, CamusWrapper<?>> getRecordWriter(
+                EtlKey key, final CamusWrapper<?> value) throws IOException,
+                InterruptedException {
+            final String workingFileName = getWorkingFileName(context, key);
+            RecordWriter<IEtlKey, CamusWrapper<?>> recordWriter = dataWriters
+                    .get(workingFileName);
+
+            if (recordWriter == null) {
+                dataWriters.putIfAbsent(workingFileName,
+                        createDataRecordWriter(context, workingFileName, value));
+                recordWriter = dataWriters.get(workingFileName);
+            }
+
+            return recordWriter;
         }
     }
 
@@ -361,9 +362,17 @@ public class EtlMultiOutputFormat extends FileOutputFormat<EtlKey, Object> {
         final AtomicInteger count = new AtomicInteger();
         volatile EtlKey lastKey;
 
+        PartitionCounts(EtlKey initialKey) {
+            lastKey = new EtlKey(initialKey);
+        }
+
         void increment(EtlKey key) {
+            // update variable values on last key instance to the latest
+            // key instance
+            lastKey.setOffset(key.getOffset());
+            lastKey.setTimestamp(key.getTimestamp());
+            lastKey.setChecksum(key.getChecksum());
             count.incrementAndGet();
-            lastKey = key;
         }
     }
 
@@ -392,15 +401,8 @@ public class EtlMultiOutputFormat extends FileOutputFormat<EtlKey, Object> {
             PartitionCounts value = counts.get(workingFileName);
 
             if (value == null) {
-                value = new PartitionCounts();
-                PartitionCounts result = counts.putIfAbsent(workingFileName,
-                        value);
-
-                // somebody else put a value in before us for this key, so
-                // we just use that
-                if (result != null) {
-                    value = result;
-                }
+                counts.putIfAbsent(workingFileName, new PartitionCounts(key));
+                value = counts.get(workingFileName);
             }
 
             value.increment(key);
@@ -408,10 +410,9 @@ public class EtlMultiOutputFormat extends FileOutputFormat<EtlKey, Object> {
 
         @Override
         public void commitTask(TaskAttemptContext context) throws IOException {
-            List<Map<String, Object>> allCountObject = new ArrayList<Map<String, Object>>();
             FileSystem fs = FileSystem.get(context.getConfiguration());
+            Path workPath = getWorkPath();
             if (isRunMoveData(context)) {
-                Path workPath = super.getWorkPath();
                 Path baseOutDir = getOutputDestinationPath(context);
                 for (FileStatus f : fs.listStatus(workPath)) {
                     String file = f.getPath().getName();
@@ -433,33 +434,20 @@ public class EtlMultiOutputFormat extends FileOutputFormat<EtlKey, Object> {
                         fs.rename(f.getPath(), dest);
                     }
                 }
-
-                Path tempPath = new Path(workPath, "counts."
-                        + context.getConfiguration().get("mapred.task.id"));
-
-                OutputStream outputStream = new BufferedOutputStream(
-                        fs.create(tempPath));
-                ObjectMapper mapper = new ObjectMapper();
-                log.info("Writing counts to : " + tempPath.toString());
-                long time = System.currentTimeMillis();
-                mapper.writeValue(outputStream, allCountObject);
-                log.debug("Time taken : " + (System.currentTimeMillis() - time)
-                        / 1000);
             }
 
-            try (SequenceFile.Writer offsetWriter = SequenceFile.createWriter(
-                    context.getConfiguration(), SequenceFile.Writer
-                            .file(new Path(super.getWorkPath(), getUniqueFile(
-                                    context, OFFSET_PREFIX, ""))),
-                    SequenceFile.Writer.keyClass(EtlKey.class),
-                    SequenceFile.Writer.valueClass(NullWritable.class))) {
-                for (Entry<String, PartitionCounts> entry : counts.entrySet()) {
-                    // write the last key passed to the committer
-                    offsetWriter.append(entry.getValue().lastKey,
-                            NullWritable.get());
-                }
-            }
+            Iterable<EtlKey> finalKeys = Iterables.transform(counts.entrySet(),
+                    new Function<Entry<String, PartitionCounts>, EtlKey>() {
+                        @Override
+                        public EtlKey apply(Entry<String, PartitionCounts> input) {
+                            return input.getValue().lastKey;
+                        }
+                    });
 
+            Path outputPath = new Path(workPath, getUniqueFile(context,
+                    OFFSET_PREFIX, ""));
+
+            jobRecordKeeper.recordFinalOffsets(finalKeys, outputPath);
             super.commitTask(context);
         }
 

@@ -1,12 +1,12 @@
 package com.linkedin.camus.etl.kafka.mapred;
 
+import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -22,19 +22,11 @@ import kafka.javaapi.OffsetResponse;
 import kafka.javaapi.PartitionMetadata;
 import kafka.javaapi.TopicMetadata;
 
-import org.apache.hadoop.fs.FileStatus;
-import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.fs.PathFilter;
-import org.apache.hadoop.io.NullWritable;
-import org.apache.hadoop.io.SequenceFile;
 import org.apache.hadoop.mapreduce.InputFormat;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.JobContext;
 import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
-import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
-import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.log4j.Logger;
 
 import com.google.common.primitives.Longs;
@@ -47,11 +39,13 @@ import com.linkedin.camus.etl.kafka.common.EtlKey;
 import com.linkedin.camus.etl.kafka.common.EtlRequest;
 import com.linkedin.camus.etl.kafka.common.KafkaBrokerClient;
 import com.linkedin.camus.etl.kafka.mapred.io.EtlRecordReader;
+import com.linkedin.camus.etl.kafka.persistence.JobRecordKeeper;
 
 /**
  * Input format for a Kafka pull job.
  */
 public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper<?>> {
+    private static final Logger log = Logger.getLogger(EtlInputFormat.class);
 
     private static class LeaderInfo {
         private final URI uri;
@@ -97,7 +91,7 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper<?>> {
     public static final String ETL_IGNORE_SCHEMA_ERRORS = "etl.ignore.schema.errors";
     public static final String ETL_AUDIT_IGNORE_SERVICE_TOPIC_LIST = "etl.audit.ignore.service.topic.list";
 
-    private final Logger log = Logger.getLogger(getClass());
+    private JobRecordKeeper jobRecordKeeper;
 
     @SuppressWarnings({ "unchecked", "rawtypes" })
     @Override
@@ -220,13 +214,15 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper<?>> {
     public List<InputSplit> getSplits(JobContext context) throws IOException,
             InterruptedException {
         CamusJob.startTiming("getSplits");
+
+        jobRecordKeeper = CamusJob.getRecordKeeper(context);
+
         Map<LeaderInfo, List<TopicAndPartition>> topicAndPartitionByLeaderMap = getTopicPartitionInfoByLeader(context);
+        checkNotNull(topicAndPartitionByLeaderMap,
+                "Failed to get broker metadata.");
 
-        if (topicAndPartitionByLeaderMap == null) {
-            throw new RuntimeException("Failed to get broker metadata...");
-        }
-
-        Map<EtlRequest, EtlKey> largestOffsetKeys = getLargestPreviousOffsets(context);
+        Map<TopicAndPartition, EtlKey> latestOffsetKeys = jobRecordKeeper
+                .getLatestEtlOffsets();
 
         Set<String> moveToLatestTopics = getMoveToLatestTopicsSet(context);
 
@@ -238,14 +234,16 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper<?>> {
         Collections.sort(finalRequests);
 
         for (EtlRequest request : finalRequests) {
+            TopicAndPartition top = new TopicAndPartition(request.getTopic(),
+                    request.getPartition());
             if (moveToLatestTopics.contains("all")
                     || moveToLatestTopics.contains(request.getTopic())) {
-                largestOffsetKeys.put(request, new EtlKey(request.getTopic(),
+                latestOffsetKeys.put(top, new EtlKey(request.getTopic(),
                         request.getLeaderId(), request.getPartition(), 0,
                         request.getLatestOffset()));
             }
 
-            EtlKey key = largestOffsetKeys.get(request);
+            EtlKey key = latestOffsetKeys.get(top);
             if (key != null) {
                 request.setOffset(key.getOffset());
             }
@@ -256,7 +254,7 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper<?>> {
                 log.warn("Moving to the earliest offset");
 
                 request.setOffset(request.getEarliestOffset());
-                largestOffsetKeys.put(request, new EtlKey(request.getTopic(),
+                latestOffsetKeys.put(top, new EtlKey(request.getTopic(),
                         request.getLeaderId(), request.getPartition(), 0,
                         request.getLatestOffset()));
             } else if (request.getOffset() > request.getLatestOffset()) {
@@ -265,8 +263,8 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper<?>> {
                 log.warn("Moving to the latest offset");
 
                 request.setOffset(request.getLatestOffset());
-                largestOffsetKeys.put(
-                        request,
+                latestOffsetKeys.put(
+                        top,
                         new EtlKey(request.getTopic(), request.getLeaderId(),
                                 request.getPartition(), request
                                         .getLatestOffset(), request
@@ -276,8 +274,9 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper<?>> {
             log.info(request);
         }
 
-        writeRequests(finalRequests, context);
-        writePreviousEtlKeys(largestOffsetKeys.values(), context);
+        jobRecordKeeper.recordRequests(finalRequests);
+        jobRecordKeeper.recordPreviousKeys(latestOffsetKeys.values());
+
         CamusJob.stopTiming("getSplits");
         return allocateWork(finalRequests, context);
     }
@@ -466,93 +465,6 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper<?>> {
         }
     }
 
-    private void writePreviousEtlKeys(Collection<EtlKey> etlKeys,
-            JobContext context) throws IOException {
-        if (etlKeys.isEmpty()) {
-            return;
-        }
-
-        FileSystem fs = FileSystem.get(context.getConfiguration());
-        Path outputPath = FileOutputFormat.getOutputPath(context);
-
-        if (!fs.exists(outputPath)) {
-            fs.mkdirs(outputPath);
-        }
-
-        Path output = new Path(outputPath, EtlMultiOutputFormat.OFFSET_PREFIX
-                + "-previous");
-
-        try (SequenceFile.Writer writer = SequenceFile.createWriter(
-                context.getConfiguration(), SequenceFile.Writer.file(output),
-                SequenceFile.Writer.keyClass(EtlKey.class),
-                SequenceFile.Writer.valueClass(NullWritable.class))) {
-            for (EtlKey key : etlKeys) {
-                writer.append(key, NullWritable.get());
-            }
-        }
-    }
-
-    private void writeRequests(List<EtlRequest> requests, JobContext context)
-            throws IOException {
-        if (requests.isEmpty()) {
-            return;
-        }
-
-        FileSystem fs = FileSystem.get(context.getConfiguration());
-        Path outputPath = FileOutputFormat.getOutputPath(context);
-
-        if (!fs.exists(outputPath)) {
-            fs.mkdirs(outputPath);
-        }
-
-        Path output = new Path(outputPath, EtlMultiOutputFormat.REQUESTS_FILE);
-
-        try (SequenceFile.Writer writer = SequenceFile.createWriter(
-                context.getConfiguration(), SequenceFile.Writer.file(output),
-                SequenceFile.Writer.keyClass(EtlRequest.class),
-                SequenceFile.Writer.valueClass(NullWritable.class))) {
-            for (EtlRequest r : requests) {
-                writer.append(r, NullWritable.get());
-            }
-        }
-    }
-
-    private Map<EtlRequest, EtlKey> getLargestPreviousOffsets(JobContext context)
-            throws IOException {
-        Path[] inputs = FileInputFormat.getInputPaths(context);
-        Map<EtlRequest, EtlKey> offsetKeysMap = new HashMap<>();
-
-        for (Path input : inputs) {
-            log.debug("checking input path: " + input);
-            FileSystem fs = input.getFileSystem(context.getConfiguration());
-
-            for (FileStatus f : fs.listStatus(input, new OffsetFileFilter())) {
-                log.info("previous offset file:" + f.getPath().toString());
-
-                try (SequenceFile.Reader reader = new SequenceFile.Reader(
-                        context.getConfiguration(), SequenceFile.Reader.file(f
-                                .getPath()))) {
-                    final EtlKey key = new EtlKey();
-                    while (reader.next(key, NullWritable.get())) {
-                        EtlRequest request = new EtlRequest(key.getTopic(),
-                                key.getLeaderId(), key.getPartition(), null);
-
-                        EtlKey oldKey = offsetKeysMap.get(request);
-                        if (oldKey != null) {
-                            if (key.getOffset() > oldKey.getOffset()) {
-                                offsetKeysMap.put(request, key);
-                            }
-                        } else {
-                            offsetKeysMap.put(request, key);
-                        }
-                    }
-                }
-            }
-        }
-
-        return offsetKeysMap;
-    }
-
     public static void setMoveToLatestTopics(JobContext job, String val) {
         job.getConfiguration().set(KAFKA_MOVE_TO_LAST_OFFSET_LIST, val);
     }
@@ -672,12 +584,4 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper<?>> {
         return cls;
     }
 
-    private class OffsetFileFilter implements PathFilter {
-
-        @Override
-        public boolean accept(Path arg0) {
-            return arg0.getName()
-                    .startsWith(EtlMultiOutputFormat.OFFSET_PREFIX);
-        }
-    }
 }

@@ -1,5 +1,7 @@
 package com.linkedin.camus.etl.kafka;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -52,6 +54,8 @@ import com.linkedin.camus.etl.kafka.common.EtlKey;
 import com.linkedin.camus.etl.kafka.common.ExceptionWritable;
 import com.linkedin.camus.etl.kafka.mapred.EtlInputFormat;
 import com.linkedin.camus.etl.kafka.mapred.EtlMultiOutputFormat;
+import com.linkedin.camus.etl.kafka.persistence.JobRecordKeeper;
+import com.linkedin.camus.etl.kafka.persistence.JobRecordKeeperFactory;
 
 public class CamusJob extends Configured implements Tool {
 
@@ -60,6 +64,7 @@ public class CamusJob extends Configured implements Tool {
     public static final String ETL_COUNTS_PATH = "etl.counts.path";
     public static final String ETL_KEEP_COUNT_FILES = "etl.keep.count.files";
     public static final String ETL_EXECUTION_HISTORY_MAX_OF_QUOTA = "etl.execution.history.max.of.quota";
+    public static final String ETL_JOB_RECORD_KEEPER_CLASS = "etl.execution.job.recordkeeper";
     public static final String ZK_AUDIT_HOSTS = "zookeeper.audit.hosts";
     public static final String KAFKA_MONITOR_TIER = "kafka.monitor.tier";
     public static final String CAMUS_MESSAGE_ENCODER_CLASS = "camus.message.encoder.class";
@@ -550,5 +555,14 @@ public class CamusJob extends Configured implements Tool {
 
     public static boolean getLog4jConfigure(JobContext job) {
         return job.getConfiguration().getBoolean(LOG4J_CONFIGURATION, false);
+    }
+
+    public static JobRecordKeeper getRecordKeeper(JobContext context) {
+        Configuration conf = context.getConfiguration();
+        Class<? extends JobRecordKeeper> type = conf.getClass(
+                CamusJob.ETL_JOB_RECORD_KEEPER_CLASS, null,
+                JobRecordKeeper.class);
+        checkNotNull(type, "No JobRecordKeeper configured.");
+        return new JobRecordKeeperFactory().create(context, type);
     }
 }
