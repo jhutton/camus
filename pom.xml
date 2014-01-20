@@ -13,8 +13,10 @@
 	<packaging>pom</packaging>
 	<name>Camus Parent</name>
 	<description>
-    Camus is LinkedIn's Kafka->HDFS pipeline. It is a mapreduce job that does distributed data loads out of Kafka.
-  </description>
+	    Camus is LinkedIn's Kafka->HDFS pipeline. It is a mapreduce
+job that does distributed data loads out of Kafka, refactored to better
+suit the needs of Meridian.
+	</description>
 	<url>https://github.com/linkedin/camus</url>
 
 	<properties>

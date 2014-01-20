@@ -19,22 +19,21 @@ import com.linkedin.camus.schemaregistry.SchemaRegistry;
 
 public class KafkaAvroMessageDecoder extends MessageDecoder<Record> {
     protected DecoderFactory decoderFactory;
-    protected SchemaRegistry<Schema> registry;
+    protected SchemaRegistry registry;
     private Schema latestSchema;
 
     @Override
     public void init(Properties props, String topicName) {
         super.init(props, topicName);
         try {
-            @SuppressWarnings("unchecked")
-            SchemaRegistry<Schema> registry = (SchemaRegistry<Schema>) Class
+            SchemaRegistry registry = (SchemaRegistry) Class
                     .forName(
                             props.getProperty(KafkaAvroMessageEncoder.KAFKA_MESSAGE_CODER_SCHEMA_REGISTRY_CLASS))
                     .newInstance();
 
             registry.init(props);
 
-            this.registry = new CachedSchemaRegistry<Schema>(registry);
+            this.registry = new CachedSchemaRegistry(registry);
             this.latestSchema = registry.getLatestSchemaByTopic(topicName)
                     .getSchema();
         } catch (Exception e) {
@@ -52,11 +51,11 @@ public class KafkaAvroMessageDecoder extends MessageDecoder<Record> {
         private int length;
         private Schema targetSchema;
         private static final byte MAGIC_BYTE = 0x0;
-        private final SchemaRegistry<Schema> registry;
+        private final SchemaRegistry registry;
         private final String topicName;
         private final byte[] payload;
 
-        public MessageDecoderHelper(SchemaRegistry<Schema> registry,
+        public MessageDecoderHelper(SchemaRegistry registry,
                 String topicName, byte[] payload) {
             this.registry = registry;
             this.topicName = topicName;
@@ -116,9 +115,9 @@ public class KafkaAvroMessageDecoder extends MessageDecoder<Record> {
                     helper.getSchema()) : new GenericDatumReader<Record>(
                     helper.getSchema(), helper.getTargetSchema());
 
-            wrapper.set(reader.read(null, decoderFactory
-                    .binaryDecoder(helper.getBuffer().array(),
-                            helper.getStart(), helper.getLength(), null)));
+            wrapper.set(reader.read(null, decoderFactory.binaryDecoder(helper
+                    .getBuffer().array(), helper.getStart(),
+                    helper.getLength(), null)));
             return true;
         } catch (IOException e) {
             throw new MessageDecoderException(e);

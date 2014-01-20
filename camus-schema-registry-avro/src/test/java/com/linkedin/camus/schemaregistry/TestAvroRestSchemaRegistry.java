@@ -7,7 +7,6 @@ import java.util.Properties;
 import org.apache.avro.Schema;
 import org.apache.avro.repo.InMemoryRepository;
 import org.apache.avro.repo.server.RepositoryServer;
-import org.apache.hadoop.conf.Configuration;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.runner.RunWith;
@@ -23,17 +22,17 @@ public class TestAvroRestSchemaRegistry extends TestSchemaRegistries {
 	public static final Schema SCHEMA2 = new Schema.Parser()
 			.parse("{\"type\":\"record\",\"name\":\"DummyLog2\",\"namespace\":\"com.linkedin.camus.example.records\",\"doc\":\"Logs for really important stuff.\",\"fields\":[{\"name\":\"id\",\"type\":\"long\"},{\"name\":\"name\",\"type\":\"string\"},{\"name\":\"muchoStuff\",\"type\":{\"type\":\"map\",\"values\":\"string\"}}]}");
 
-	public TestAvroRestSchemaRegistry(SchemaRegistry<String> registry) {
+	public TestAvroRestSchemaRegistry(SchemaRegistry registry) {
 		super(registry);
 	}
 
 	@Override
-	public Object getSchema1() {
+	public Schema getSchema1() {
 		return SCHEMA1;
 	}
 
 	@Override
-	public Object getSchema2() {
+	public Schema getSchema2() {
 		return SCHEMA2;
 	}
 
@@ -54,12 +53,12 @@ public class TestAvroRestSchemaRegistry extends TestSchemaRegistries {
 	}
 
 	@Parameters
-	public static Collection data() {
+	public static Collection<?> data() {
 	    Properties props = new Properties();
 		props.put(AvroRestSchemaRegistry.ETL_SCHEMA_REGISTRY_URL,
 				"http://localhost:8123/schema-repo/");
-		SchemaRegistry<Schema> avroSchemaRegistry = new AvroRestSchemaRegistry();
-		
+		SchemaRegistry avroSchemaRegistry = new AvroRestSchemaRegistry();
+
 		avroSchemaRegistry.init(props);
 		Object[][] data = new Object[][] { { avroSchemaRegistry } };
 		return Arrays.asList(data);

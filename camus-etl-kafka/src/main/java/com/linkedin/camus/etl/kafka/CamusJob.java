@@ -57,6 +57,9 @@ import com.linkedin.camus.etl.kafka.mapred.EtlMultiOutputFormat;
 import com.linkedin.camus.etl.kafka.persistence.JobRecordKeeper;
 import com.linkedin.camus.etl.kafka.persistence.JobRecordKeeperFactory;
 
+/**
+ * The main camus job
+ */
 public class CamusJob extends Configured implements Tool {
 
     public static final String ETL_EXECUTION_BASE_PATH = "etl.execution.base.path";

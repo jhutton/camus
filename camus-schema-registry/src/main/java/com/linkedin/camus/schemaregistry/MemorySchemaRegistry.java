@@ -5,30 +5,30 @@ import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
+import org.apache.avro.Schema;
+
 /**
  * This is an in-memory implementation of a SchemaRegistry. It has no
  * persistence. If you wish to make schema IDs match between executions, you
  * must issue register calls in the same order each time, as the schema IDs are
  * a long that's incremented on every register call.
- * 
- * @param <S>
- *            The type of the schema that this registry manages.
  */
-public class MemorySchemaRegistry<S> implements SchemaRegistry<S> {
-	private final Map<MemorySchemaRegistryTuple, S> schemasById;
+public class MemorySchemaRegistry implements SchemaRegistry {
+	private final Map<MemorySchemaRegistryTuple, Schema> schemasById;
 	private final Map<String, MemorySchemaRegistryTuple> latest;
 	private final AtomicLong ids;
-	
-	public void init(Properties props) {}
+
+	@Override
+    public void init(Properties props) {}
 
 	public MemorySchemaRegistry() {
-		this.schemasById = new ConcurrentHashMap<MemorySchemaRegistryTuple, S>();
+		this.schemasById = new ConcurrentHashMap<MemorySchemaRegistryTuple, Schema>();
 		this.latest = new ConcurrentHashMap<String, MemorySchemaRegistryTuple>();
 		this.ids = new AtomicLong(0);
 	}
 
 	@Override
-	public String register(String topic, S schema) {
+	public String register(String topic, Schema schema) {
 		long id = ids.incrementAndGet();
 		MemorySchemaRegistryTuple tuple = new MemorySchemaRegistryTuple(topic,
 				id);
@@ -38,9 +38,9 @@ public class MemorySchemaRegistry<S> implements SchemaRegistry<S> {
 	}
 
 	@Override
-	public S getSchemaByID(String topicName, String idStr) {
+	public Schema getSchemaByID(String topicName, String idStr) {
 		try {
-			S schema = schemasById.get(new MemorySchemaRegistryTuple(topicName,
+			Schema schema = schemasById.get(new MemorySchemaRegistryTuple(topicName,
 					Long.parseLong(idStr)));
 
 			if (schema == null) {
@@ -55,20 +55,20 @@ public class MemorySchemaRegistry<S> implements SchemaRegistry<S> {
 	}
 
 	@Override
-	public SchemaDetails<S> getLatestSchemaByTopic(String topicName) {
+	public SchemaDetails<? extends Schema> getLatestSchemaByTopic(String topicName) {
 		MemorySchemaRegistryTuple tuple = latest.get(topicName);
 
 		if (tuple == null) {
 			throw new SchemaNotFoundException();
 		}
 
-		S schema = schemasById.get(tuple);
+		Schema schema = schemasById.get(tuple);
 
 		if (schema == null) {
 			throw new SchemaNotFoundException();
 		}
 
-		return new SchemaDetails<S>(topicName, Long.toString(tuple.getId()),
+		return new SchemaDetails<Schema>(topicName, Long.toString(tuple.getId()),
 				schema);
 	}
 

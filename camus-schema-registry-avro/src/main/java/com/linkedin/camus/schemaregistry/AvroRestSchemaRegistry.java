@@ -7,16 +7,15 @@ import org.apache.avro.repo.SchemaEntry;
 import org.apache.avro.repo.SchemaValidationException;
 import org.apache.avro.repo.Subject;
 import org.apache.avro.repo.client.RESTRepositoryClient;
-import org.apache.hadoop.conf.Configuration;
 
 /**
  * An implementation of SchemaRegistry that uses Avro's schema registry to
  * manage Avro schemas.
  */
-public class AvroRestSchemaRegistry implements SchemaRegistry<Schema> {
+public class AvroRestSchemaRegistry implements SchemaRegistry {
 	private RESTRepositoryClient client;
 	public static final String ETL_SCHEMA_REGISTRY_URL = "etl.schema.registry.url";
-	
+
 	 @Override
 	public void init(Properties props) {
 	     client = new RESTRepositoryClient(props.getProperty(ETL_SCHEMA_REGISTRY_URL));

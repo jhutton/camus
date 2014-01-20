@@ -3,26 +3,31 @@ package com.linkedin.camus.schemaregistry;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 
-public class CachedSchemaRegistry<S> implements SchemaRegistry<S> {
-	private final SchemaRegistry<S> registry;
-	private final ConcurrentHashMap<CachedSchemaTuple, S> cachedById;
-	private final ConcurrentHashMap<String, S> cachedLatest;
-	
-	public void init(Properties props) {}
+import org.apache.avro.Schema;
 
-	public CachedSchemaRegistry(SchemaRegistry<S> registry) {
+public class CachedSchemaRegistry implements SchemaRegistry {
+	private final SchemaRegistry registry;
+	private final ConcurrentHashMap<CachedSchemaTuple, Schema> cachedById;
+	private final ConcurrentHashMap<String, Schema> cachedLatest;
+
+	@Override
+    public void init(Properties props) {}
+
+	public CachedSchemaRegistry(SchemaRegistry registry) {
 		this.registry = registry;
-		this.cachedById = new ConcurrentHashMap<CachedSchemaTuple, S>();
-		this.cachedLatest = new ConcurrentHashMap<String, S>();
+		this.cachedById = new ConcurrentHashMap<CachedSchemaTuple, Schema>();
+		this.cachedLatest = new ConcurrentHashMap<String, Schema>();
 	}
 
-	public String register(String topic, S schema) {
+	@Override
+    public String register(String topic, Schema schema) {
 		return registry.register(topic, schema);
 	}
 
-	public S getSchemaByID(String topic, String id) {
+	@Override
+    public Schema getSchemaByID(String topic, String id) {
 		CachedSchemaTuple cacheKey = new CachedSchemaTuple(topic, id);
-		S schema = cachedById.get(cacheKey);
+        Schema schema = cachedById.get(cacheKey);
 		if (schema == null) {
 			schema = registry.getSchemaByID(topic, id);
 			cachedById.putIfAbsent(cacheKey, schema);
@@ -30,8 +35,9 @@ public class CachedSchemaRegistry<S> implements SchemaRegistry<S> {
 		return schema;
 	}
 
-	public SchemaDetails<S> getLatestSchemaByTopic(String topicName) {
-		S schema = cachedLatest.get(topicName);
+	@Override
+    public SchemaDetails<? extends Schema> getLatestSchemaByTopic(String topicName) {
+        Schema schema = cachedLatest.get(topicName);
 		if (schema == null) {
 			schema = registry.getLatestSchemaByTopic(topicName).getSchema();
 			cachedLatest.putIfAbsent(topicName, schema);

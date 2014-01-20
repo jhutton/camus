@@ -29,7 +29,7 @@ public class KafkaAvroMessageEncoder extends
 
     private static final byte MAGIC_BYTE = 0x0;
 
-    private SchemaRegistry<Schema> client;
+    private SchemaRegistry client;
     private final Map<Schema, String> cache = Collections
             .synchronizedMap(new HashMap<Schema, String>());
     private final EncoderFactory encoderFactory = EncoderFactory.get();
@@ -39,12 +39,11 @@ public class KafkaAvroMessageEncoder extends
 
     }
 
-    @SuppressWarnings("unchecked")
     @Override
     public void init(Properties props, String topicName) {
         super.init(props, topicName);
         try {
-            client = (SchemaRegistry<Schema>) Class
+            client = (SchemaRegistry) Class
                     .forName(
                             props.getProperty(KAFKA_MESSAGE_CODER_SCHEMA_REGISTRY_CLASS))
                     .newInstance();

@@ -1,8 +1,10 @@
 package com.linkedin.camus.schemaregistry;
 
-public class SchemaDetails<S> {
-	private String topic;
-	private String id;
+import org.apache.avro.Schema;
+
+public class SchemaDetails<S extends Schema> {
+	private final String topic;
+	private final String id;
 	private S schema;
 
 	public SchemaDetails(String topic, String id, S schema) {

@@ -2,6 +2,8 @@ package com.linkedin.camus.schemaregistry;
 
 import java.util.Properties;
 
+import org.apache.avro.Schema;
+
 /**
  * The schema registry is used to read and write schemas for Kafka topics. This
  * is useful because it means you no longer have to store your schema with your
@@ -9,15 +11,12 @@ import java.util.Properties;
  * a schema registry to look up the message's schema when you wish to decode it.
  * In essence, a schema registry is just a client-side interface for a versioned
  * key-value store that's meant to store schemas.
- * 
- * @param <S>
- *            A schema type.
  */
-public interface SchemaRegistry<S> {
-    
+public interface SchemaRegistry {
+
     /**
      * Initializer for SchemaRegistry;
-     * 
+     *
      * @param props
      *            Java properties
      */
@@ -27,7 +26,7 @@ public interface SchemaRegistry<S> {
 	 * Store a schema in the registry. If a schema already exists for this
 	 * topic, the old schema will not be over-written. Instead, the new schema
 	 * will be stored with a different id.
-	 * 
+	 *
 	 * @param topic
 	 *            A topic name.
 	 * @param schema
@@ -36,27 +35,27 @@ public interface SchemaRegistry<S> {
 	 *         fails, this method will throw an unchecked
 	 *         SchemaRegistryException.
 	 */
-	public String register(String topic, S schema);
+	public String register(String topic, Schema schema);
 
 	/**
 	 * Get a schema for a given topic/id pair, regardless of whether the schema
 	 * was the last one written for this topic.
-	 * 
+	 *
 	 * @param topic
 	 * @param id
 	 * @return A schema. If not schema exists, an unchecked
 	 *         SchemaNotFoundException will be thrown.
 	 */
-	public S getSchemaByID(String topic, String id);
+	public Schema getSchemaByID(String topic, String id);
 
 	/**
 	 * Get the last schema that was written for a specific topic.
-	 * 
+	 *
 	 * @param topic
 	 *            A topic name.
 	 * @return A class that contains the topic name, schema id, and schema. If
 	 *         not schema exists, an unchecked SchemaNotFoundException will be
 	 *         thrown.
 	 */
-	public SchemaDetails<S> getLatestSchemaByTopic(String topic);
+	public SchemaDetails<? extends Schema> getLatestSchemaByTopic(String topic);
 }
