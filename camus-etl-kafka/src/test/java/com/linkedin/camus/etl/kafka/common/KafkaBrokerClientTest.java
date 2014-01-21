@@ -44,4 +44,5 @@ public class KafkaBrokerClientTest {
         assertEquals(client.getHost(), uri);
         assertEquals(client.getPort(), KafkaBrokerClient.DEFAULT_KAFKA_PORT);
     }
+
 }
