@@ -54,7 +54,7 @@ public class AvroRestSchemaRegistry implements SchemaRegistry {
 	}
 
 	@Override
-	public SchemaDetails<Schema> getLatestSchemaByTopic(String topicName) {
+	public SchemaDetails getLatestSchemaByTopic(String topicName) {
 		Subject subject = client.lookup(topicName);
 
 		if (subject == null) {
@@ -68,7 +68,7 @@ public class AvroRestSchemaRegistry implements SchemaRegistry {
 			throw new SchemaNotFoundException("Schema not found for "
 					+ topicName);
 
-		return new SchemaDetails<Schema>(topicName, entry.getId(),
+		return new SchemaDetails(topicName, entry.getId(),
 				Schema.parse(entry.getSchema()));
 	}
 }

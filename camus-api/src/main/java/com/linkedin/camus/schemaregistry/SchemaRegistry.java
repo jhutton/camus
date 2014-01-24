@@ -57,5 +57,5 @@ public interface SchemaRegistry {
 	 *         not schema exists, an unchecked SchemaNotFoundException will be
 	 *         thrown.
 	 */
-	public SchemaDetails<? extends Schema> getLatestSchemaByTopic(String topic);
+	public SchemaDetails getLatestSchemaByTopic(String topic);
 }

@@ -83,14 +83,14 @@ public class FileSchemaRegistry implements SchemaRegistry {
     }
 
     @Override
-    public SchemaDetails<? extends Schema> getLatestSchemaByTopic(
+    public SchemaDetails getLatestSchemaByTopic(
             String topicName) {
         File topicDir = getTopicPath(topicName);
         if (topicDir.exists()) {
             for (File file : topicDir.listFiles()) {
                 if (file.getName().endsWith(".latest")) {
                     String id = file.getName().replace(".schema.latest", "");
-                    return new SchemaDetails<Schema>(topicName, id,
+                    return new SchemaDetails(topicName, id,
                             serializer.fromBytes(readBytes(file)));
                 }
             }

@@ -55,7 +55,7 @@ public class MemorySchemaRegistry implements SchemaRegistry {
 	}
 
 	@Override
-	public SchemaDetails<? extends Schema> getLatestSchemaByTopic(String topicName) {
+	public SchemaDetails getLatestSchemaByTopic(String topicName) {
 		MemorySchemaRegistryTuple tuple = latest.get(topicName);
 
 		if (tuple == null) {
@@ -68,7 +68,7 @@ public class MemorySchemaRegistry implements SchemaRegistry {
 			throw new SchemaNotFoundException();
 		}
 
-		return new SchemaDetails<Schema>(topicName, Long.toString(tuple.getId()),
+		return new SchemaDetails(topicName, Long.toString(tuple.getId()),
 				schema);
 	}
 

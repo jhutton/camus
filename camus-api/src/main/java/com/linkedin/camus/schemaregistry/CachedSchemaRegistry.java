@@ -36,7 +36,7 @@ public class CachedSchemaRegistry implements SchemaRegistry {
 	}
 
 	@Override
-    public SchemaDetails<? extends Schema> getLatestSchemaByTopic(String topicName) {
+    public SchemaDetails getLatestSchemaByTopic(String topicName) {
         Schema schema = cachedLatest.get(topicName);
 		if (schema == null) {
 			schema = registry.getLatestSchemaByTopic(topicName).getSchema();

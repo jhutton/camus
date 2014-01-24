@@ -1,27 +1,27 @@
 package com.linkedin.camus.schemaregistry;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import org.apache.avro.Schema;
 
-public class SchemaDetails<S extends Schema> {
+public class SchemaDetails {
 	private final String topic;
 	private final String id;
-	private S schema;
+	private final Schema schema;
 
-	public SchemaDetails(String topic, String id, S schema) {
+	public SchemaDetails(String topic, String id, Schema schema) {
+	    checkNotNull(topic, "Null topic");
+	    checkNotNull(id, "Null id");
+	    checkNotNull(schema, "Null schema");
 		this.topic = topic;
 		this.id = id;
 		this.schema = schema;
 	}
 
-	public SchemaDetails(String topic, String id) {
-		this.topic = topic;
-		this.id = id;
-	}
-
 	/**
 	 * Get the schema
 	 */
-	public S getSchema() {
+	public Schema getSchema() {
 		return schema;
 	}
 
@@ -32,6 +32,9 @@ public class SchemaDetails<S extends Schema> {
 		return topic;
 	}
 
+	/**
+	 * @return the id
+	 */
 	public String getId() {
 		return id;
 	}
@@ -46,7 +49,6 @@ public class SchemaDetails<S extends Schema> {
 		return result;
 	}
 
-	@SuppressWarnings("rawtypes")
 	@Override
 	public boolean equals(Object obj) {
 		if (this == obj)

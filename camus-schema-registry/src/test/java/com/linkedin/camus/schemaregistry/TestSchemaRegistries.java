@@ -66,14 +66,14 @@ public class TestSchemaRegistries {
 		}
 
 		assertEquals(getSchema1(), registry.getSchemaByID("test", id));
-		assertEquals(new SchemaDetails<Schema>("test", id, getSchema1()),
+		assertEquals(new SchemaDetails("test", id, getSchema1()),
 				registry.getLatestSchemaByTopic("test"));
 
 		String secondId = registry.register("test", getSchema2());
 
 		assertEquals(getSchema1(), registry.getSchemaByID("test", id));
 		assertEquals(getSchema2(), registry.getSchemaByID("test", secondId));
-		assertEquals(new SchemaDetails<Schema>("test", secondId, getSchema2()),
+		assertEquals(new SchemaDetails("test", secondId, getSchema2()),
 				registry.getLatestSchemaByTopic("test"));
 
 		try {
@@ -94,7 +94,7 @@ public class TestSchemaRegistries {
 
 		assertEquals(getSchema1(), registry.getSchemaByID("test", id));
 		assertEquals(getSchema2(), registry.getSchemaByID("test", secondId));
-		assertEquals(new SchemaDetails<Schema>("test", secondId, getSchema2()),
+		assertEquals(new SchemaDetails("test", secondId, getSchema2()),
 				registry.getLatestSchemaByTopic("test"));
 	}
 
