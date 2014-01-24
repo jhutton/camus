@@ -68,11 +68,11 @@ suit the needs of Meridian.
 				<artifactId>joda-time</artifactId>
 				<version>1.6</version>
 			</dependency>
-            <dependency>
-                <groupId>org.apache.hadoop</groupId>
-                <artifactId>hadoop-client</artifactId>
-                <version>2.0.0-mr1-cdh4.5.0</version>
-            </dependency>
+			<dependency>
+				<groupId>org.apache.hadoop</groupId>
+				<artifactId>hadoop-client</artifactId>
+				<version>2.2.0-cdh5.0.0-beta-1</version>
+			</dependency>
 			<dependency>
 				<groupId>org.apache.kafka</groupId>
 				<artifactId>kafka_2.10</artifactId>
@@ -100,7 +100,12 @@ suit the needs of Meridian.
 			<dependency>
 				<groupId>org.apache.zookeeper</groupId>
 				<artifactId>zookeeper</artifactId>
-				<version>3.3.4</version>
+				<version>3.4.5-cdh5.0.0-beta-1</version>
+			</dependency>
+			<dependency>
+				<groupId>org.mockito</groupId>
+				<artifactId>mockito-all</artifactId>
+				<version>1.9.5</version>
 			</dependency>
 			<dependency>
 				<groupId>junit</groupId>
@@ -146,17 +151,17 @@ suit the needs of Meridian.
 		<system>github</system>
 		<url>http://github.com/linkedin/camus/issues</url>
 	</issueManagement>
-	
+
 	<repositories>
-        <repository>
-            <id>cloudera</id>
-            <url>https://repository.cloudera.com/artifactory/cloudera-repos/</url>
-        </repository>
-        <repository>
-            <id>apache-releases</id>
-            <url>https://repository.apache.org/content/groups/public</url>
-        </repository>
-    </repositories>
+		<repository>
+			<id>cloudera</id>
+			<url>https://repository.cloudera.com/artifactory/cloudera-repos/</url>
+		</repository>
+		<repository>
+			<id>apache-releases</id>
+			<url>https://repository.apache.org/content/groups/public</url>
+		</repository>
+	</repositories>
 
 	<build>
 		<plugins>
