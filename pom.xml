@@ -22,6 +22,15 @@ suit the needs of Meridian.
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<avroVersion>1.7.5</avroVersion>
+		<hadoopVersion>2.2.0-cdh5.0.0-beta-1</hadoopVersion>
+		<kafkaVersion>0.8.0</kafkaVersion>
+		<log4jVersion>1.2.17</log4jVersion>
+		<jodaTimeVersion>2.3</jodaTimeVersion>
+		<zookeeperVersion>3.4.5-cdh5.0.0-beta-1</zookeeperVersion>
+		<mockitoVersion>1.9.5</mockitoVersion>
+		<scalaVersion>2.10.3</scalaVersion>
+		<junitVersion>4.10</junitVersion>
+		<testNgVersion>6.8.7</testNgVersion>
 	</properties>
 
 	<dependencyManagement>
@@ -29,29 +38,29 @@ suit the needs of Meridian.
 			<dependency>
 				<groupId>com.linkedin.camus</groupId>
 				<artifactId>camus-api</artifactId>
-				<version>0.2.0-SNAPSHOT</version>
+				<version>${project.version}</version>
 			</dependency>
 			<dependency>
 				<groupId>com.linkedin.camus</groupId>
 				<artifactId>camus-etl-kafka</artifactId>
-				<version>0.2.0-SNAPSHOT</version>
+				<version>${project.version}</version>
 			</dependency>
 			<dependency>
 				<groupId>com.linkedin.camus</groupId>
 				<artifactId>camus-schema-registry</artifactId>
-				<version>0.2.0-SNAPSHOT</version>
+				<version>${project.version}</version>
 			</dependency>
 			<dependency>
 				<groupId>com.linkedin.camus</groupId>
 				<artifactId>camus-schema-registry</artifactId>
-				<version>0.2.0-SNAPSHOT</version>
+				<version>${project.version}</version>
 				<type>test-jar</type>
 				<scope>test</scope>
 			</dependency>
 			<dependency>
 				<groupId>log4j</groupId>
 				<artifactId>log4j</artifactId>
-				<version>1.2.17</version>
+				<version>${log4jVersion}</version>
 			</dependency>
 			<dependency>
 				<groupId>org.apache.avro</groupId>
@@ -66,17 +75,17 @@ suit the needs of Meridian.
 			<dependency>
 				<groupId>joda-time</groupId>
 				<artifactId>joda-time</artifactId>
-				<version>1.6</version>
+				<version>${jodaTimeVersion}</version>
 			</dependency>
 			<dependency>
 				<groupId>org.apache.hadoop</groupId>
 				<artifactId>hadoop-client</artifactId>
-				<version>2.2.0-cdh5.0.0-beta-1</version>
+				<version>${hadoopVersion}</version>
 			</dependency>
 			<dependency>
 				<groupId>org.apache.kafka</groupId>
 				<artifactId>kafka_2.10</artifactId>
-				<version>0.8.0</version>
+				<version>${kafkaVersion}</version>
 				<exclusions>
 					<exclusion>
 						<groupId>log4j</groupId>
@@ -93,34 +102,31 @@ suit the needs of Meridian.
 				</exclusions>
 			</dependency>
 			<dependency>
-				<groupId>com.github.sgroschupf</groupId>
-				<artifactId>zkclient</artifactId>
-				<version>0.1</version>
-			</dependency>
-			<dependency>
 				<groupId>org.apache.zookeeper</groupId>
 				<artifactId>zookeeper</artifactId>
-				<version>3.4.5-cdh5.0.0-beta-1</version>
+				<version>${zookeeperVersion}</version>
 			</dependency>
 			<dependency>
 				<groupId>org.mockito</groupId>
 				<artifactId>mockito-all</artifactId>
-				<version>1.9.5</version>
-			</dependency>
-			<dependency>
-				<groupId>junit</groupId>
-				<artifactId>junit</artifactId>
-				<version>4.8.1</version>
+				<version>${mockitoVersion}</version>
 			</dependency>
 			<dependency>
 				<groupId>org.scala-lang</groupId>
 				<artifactId>scala-library</artifactId>
-				<version>2.10.3</version>
+				<version>${scalaVersion}</version>
 			</dependency>
 			<dependency>
-				<groupId>org.xerial.snappy</groupId>
-				<artifactId>snappy-java</artifactId>
-				<version>1.0.4.1</version>
+				<groupId>junit</groupId>
+				<artifactId>junit</artifactId>
+				<version>${junitVersion}</version>
+				<scope>test</scope>
+			</dependency>
+			<dependency>
+				<groupId>org.testng</groupId>
+				<artifactId>testng</artifactId>
+				<version>${testNgVersion}</version>
+				<scope>test</scope>
 			</dependency>
 
 		</dependencies>
@@ -177,7 +183,7 @@ suit the needs of Meridian.
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-jar-plugin</artifactId>
-				<version>2.2</version>
+				<version>2.3.2</version>
 				<executions>
 					<execution>
 						<goals>
@@ -188,5 +194,4 @@ suit the needs of Meridian.
 			</plugin>
 		</plugins>
 	</build>
-
 </project>
