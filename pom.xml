@@ -136,7 +136,6 @@ suit the needs of Meridian.
 		<module>camus-api</module>
 		<module>camus-etl-kafka</module>
 		<module>camus-schema-registry</module>
-		<module>camus-schema-registry-avro</module>
 	</modules>
 
 	<licenses>
