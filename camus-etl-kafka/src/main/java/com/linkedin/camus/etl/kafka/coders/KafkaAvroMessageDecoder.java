@@ -1,26 +1,32 @@
 package com.linkedin.camus.etl.kafka.coders;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.util.Properties;
+import java.util.concurrent.ConcurrentMap;
 
 import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericData.Record;
 import org.apache.avro.generic.GenericDatumReader;
+import org.apache.avro.io.BinaryDecoder;
 import org.apache.avro.io.DatumReader;
 import org.apache.avro.io.DecoderFactory;
-import org.apache.hadoop.io.Text;
 
+import com.google.common.collect.Maps;
 import com.linkedin.camus.coders.CamusWrapper;
 import com.linkedin.camus.coders.MessageDecoder;
 import com.linkedin.camus.coders.MessageDecoderException;
 import com.linkedin.camus.schemaregistry.CachedSchemaRegistry;
+import com.linkedin.camus.schemaregistry.RegistryKey;
 import com.linkedin.camus.schemaregistry.SchemaRegistry;
 
 public class KafkaAvroMessageDecoder extends MessageDecoder<Record> {
+    public static final String KAFKA_MESSAGE_CODER_SCHEMA_REGISTRY_CLASS = "kafka.message.coder.schema.registry.class";
+
     protected DecoderFactory decoderFactory;
     protected SchemaRegistry registry;
     private Schema latestSchema;
+    private final ConcurrentMap<Integer, RegistryKey> keyMap = Maps
+            .newConcurrentMap();
 
     @Override
     public void init(Properties props, String topicName) {
@@ -28,14 +34,12 @@ public class KafkaAvroMessageDecoder extends MessageDecoder<Record> {
         try {
             SchemaRegistry registry = (SchemaRegistry) Class
                     .forName(
-                            props.getProperty(KafkaAvroMessageEncoder.KAFKA_MESSAGE_CODER_SCHEMA_REGISTRY_CLASS))
+                            props.getProperty(KAFKA_MESSAGE_CODER_SCHEMA_REGISTRY_CLASS))
                     .newInstance();
-
             registry.init(props);
 
             this.registry = new CachedSchemaRegistry(registry);
-            this.latestSchema = registry.getLatestSchemaByTopic(topicName)
-                    .getSchema();
+            this.latestSchema = registry.getLatestSchema(topicName).getSchema();
         } catch (Exception e) {
             throw new MessageDecoderException(e);
         }
@@ -43,115 +47,25 @@ public class KafkaAvroMessageDecoder extends MessageDecoder<Record> {
         decoderFactory = DecoderFactory.get();
     }
 
-    private class MessageDecoderHelper {
-        // private Message message;
-        private ByteBuffer buffer;
-        private Schema schema;
-        private int start;
-        private int length;
-        private Schema targetSchema;
-        private static final byte MAGIC_BYTE = 0x0;
-        private final SchemaRegistry registry;
-        private final String topicName;
-        private final byte[] payload;
-
-        public MessageDecoderHelper(SchemaRegistry registry,
-                String topicName, byte[] payload) {
-            this.registry = registry;
-            this.topicName = topicName;
-            // this.message = message;
-            this.payload = payload;
-        }
-
-        public ByteBuffer getBuffer() {
-            return buffer;
-        }
-
-        public Schema getSchema() {
-            return schema;
-        }
-
-        public int getStart() {
-            return start;
-        }
-
-        public int getLength() {
-            return length;
-        }
-
-        public Schema getTargetSchema() {
-            return targetSchema;
-        }
-
-        private ByteBuffer getByteBuffer(byte[] payload) {
-            ByteBuffer buffer = ByteBuffer.wrap(payload);
-            if (buffer.get() != MAGIC_BYTE)
-                throw new IllegalArgumentException("Unknown magic byte!");
-            return buffer;
-        }
-
-        public MessageDecoderHelper invoke() {
-            buffer = getByteBuffer(payload);
-            String id = Integer.toString(buffer.getInt());
-            schema = registry.getSchemaByID(topicName, id);
-            if (schema == null)
-                throw new IllegalStateException("Unknown schema id: " + id);
-
-            start = buffer.position() + buffer.arrayOffset();
-            length = buffer.limit() - 5;
-
-            // try to get a target schema, if any
-            targetSchema = latestSchema;
-            return this;
-        }
-    }
-
     @Override
     public boolean decode(byte[] payload, CamusWrapper<Record> wrapper) {
-        try {
-            MessageDecoderHelper helper = new MessageDecoderHelper(registry,
-                    topicName, payload).invoke();
-            DatumReader<Record> reader = (helper.getTargetSchema() == null) ? new GenericDatumReader<Record>(
-                    helper.getSchema()) : new GenericDatumReader<Record>(
-                    helper.getSchema(), helper.getTargetSchema());
+        BinaryDecoder decoder = decoderFactory.binaryDecoder(payload, null);
 
-            wrapper.set(reader.read(null, decoderFactory.binaryDecoder(helper
-                    .getBuffer().array(), helper.getStart(),
-                    helper.getLength(), null)));
+        try {
+            Integer id = decoder.readInt();
+            RegistryKey key = keyMap.get(id);
+            if (key == null) {
+                key = RegistryKey.get(topicName, id);
+                keyMap.put(id, key);
+            }
+
+            Schema schema = registry.getSchema(key);
+            DatumReader<Record> reader = new GenericDatumReader<Record>(
+                    latestSchema, schema);
+            wrapper.set(reader.read(null, decoder));
             return true;
         } catch (IOException e) {
             throw new MessageDecoderException(e);
-        }
-    }
-
-    public static class CamusAvroWrapper extends CamusWrapper<Record> {
-
-        public CamusAvroWrapper(Record record) {
-            super(record);
-            Record header = (Record) super.getRecord().get("header");
-            if (header != null) {
-                if (header.get("server") != null) {
-                    put(new Text("server"), new Text(header.get("server")
-                            .toString()));
-                }
-                if (header.get("service") != null) {
-                    put(new Text("service"), new Text(header.get("service")
-                            .toString()));
-                }
-            }
-        }
-
-        @Override
-        public long getTimestamp() {
-            Record header = (Record) super.getRecord().get("header");
-
-            if (header != null && header.get("time") != null) {
-                return (Long) header.get("time");
-            } else if (super.getRecord().get("timestamp") != null) {
-                return (Long) super.getRecord().get("timestamp");
-            } else {
-                return System.currentTimeMillis();
-            }
         }
     }
 }

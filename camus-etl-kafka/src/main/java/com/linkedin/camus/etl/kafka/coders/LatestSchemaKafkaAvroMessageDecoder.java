@@ -16,7 +16,7 @@ public class LatestSchemaKafkaAvroMessageDecoder extends
         try {
             GenericDatumReader<Record> reader = new GenericDatumReader<Record>();
 
-            Schema schema = super.registry.getLatestSchemaByTopic(
+            Schema schema = super.registry.getLatestSchema(
                     super.topicName).getSchema();
 
             reader.setSchema(schema);

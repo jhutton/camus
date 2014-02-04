@@ -22,40 +22,26 @@ public interface SchemaRegistry {
      */
     public void init(Properties props);
 
-	/**
-	 * Store a schema in the registry. If a schema already exists for this
-	 * topic, the old schema will not be over-written. Instead, the new schema
-	 * will be stored with a different id.
-	 *
-	 * @param topic
-	 *            A topic name.
-	 * @param schema
-	 *            A schema.
-	 * @return A schema id. This id is implementation-specific. If the write
-	 *         fails, this method will throw an unchecked
-	 *         SchemaRegistryException.
-	 */
-	public String register(String topic, Schema schema);
+    /**
+     * Get a schema for a given registry key regardless of whether the schema
+     * was the last one written for this topic.
+     *
+     * @param the
+     *            registry key
+     * @return schema
+     * @throws SchemaNotFoundException
+     *             if no schema is found
+     */
+    public Schema getSchema(RegistryKey key);
 
-	/**
-	 * Get a schema for a given topic/id pair, regardless of whether the schema
-	 * was the last one written for this topic.
-	 *
-	 * @param topic
-	 * @param id
-	 * @return A schema. If not schema exists, an unchecked
-	 *         SchemaNotFoundException will be thrown.
-	 */
-	public Schema getSchemaByID(String topic, String id);
-
-	/**
-	 * Get the last schema that was written for a specific topic.
-	 *
-	 * @param topic
-	 *            A topic name.
-	 * @return A class that contains the topic name, schema id, and schema. If
-	 *         not schema exists, an unchecked SchemaNotFoundException will be
-	 *         thrown.
-	 */
-	public SchemaDetails getLatestSchemaByTopic(String topic);
+    /**
+     * Get the last schema that was written for a specific topic.
+     *
+     * @param topic
+     *            A topic name.
+     * @return the schema details
+     * @throws SchemaNotFoundException
+     *             if no schema is found
+     */
+    public SchemaDetails getLatestSchema(String topic);
 }

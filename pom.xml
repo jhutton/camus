@@ -14,8 +14,8 @@
 	<name>Camus Parent</name>
 	<description>
 	    Camus is LinkedIn's Kafka->HDFS pipeline. It is a mapreduce
-job that does distributed data loads out of Kafka, refactored to better
-suit the needs of Meridian.
+        job that does distributed data loads out of Kafka, refactored to better
+        suit the needs of Meridian.
 	</description>
 	<url>https://github.com/linkedin/camus</url>
 
@@ -35,28 +35,6 @@ suit the needs of Meridian.
 
 	<dependencyManagement>
 		<dependencies>
-			<dependency>
-				<groupId>com.linkedin.camus</groupId>
-				<artifactId>camus-api</artifactId>
-				<version>${project.version}</version>
-			</dependency>
-			<dependency>
-				<groupId>com.linkedin.camus</groupId>
-				<artifactId>camus-etl-kafka</artifactId>
-				<version>${project.version}</version>
-			</dependency>
-			<dependency>
-				<groupId>com.linkedin.camus</groupId>
-				<artifactId>camus-schema-registry</artifactId>
-				<version>${project.version}</version>
-			</dependency>
-			<dependency>
-				<groupId>com.linkedin.camus</groupId>
-				<artifactId>camus-schema-registry</artifactId>
-				<version>${project.version}</version>
-				<type>test-jar</type>
-				<scope>test</scope>
-			</dependency>
 			<dependency>
 				<groupId>log4j</groupId>
 				<artifactId>log4j</artifactId>
@@ -135,7 +113,6 @@ suit the needs of Meridian.
 	<modules>
 		<module>camus-api</module>
 		<module>camus-etl-kafka</module>
-		<module>camus-schema-registry</module>
 	</modules>
 
 	<licenses>
